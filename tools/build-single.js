@@ -67,6 +67,7 @@ const files = [
   ['js/theme.js', 'js/theme.js（日间 / 夜间主题）'],
   ['js/store/resume-store.js', 'js/store/resume-store.js（P0 数据门面）'],
   ['js/store/resume-library.js', 'js/store/resume-library.js（M1 多简历仓库）'],
+  ['js/store/local-history.js', 'js/store/local-history.js（N11 本地版本历史）'],
   ['js/store/native-bridge.js', 'js/store/native-bridge.js（P2 原生桥）'],
   ['js/store/snippet-library.js', 'js/store/snippet-library.js（A5 经历素材库）'],
   ['js/store/datasource.js', 'js/store/datasource.js（M4 数据源契约与注册表）'],

@@ -231,3 +231,133 @@ data = { name:'', subtitle:'', subtitleBold:false, meta:'', metaBold:false, cont
   /* 临时交换全局 data 后必须恢复：调用前 data 是上面的空对象，调用后仍是它 */
   E('buildResumeHtml 不改写全局 data', data && data.sections && data.sections.length === 0);
 })();
+
+/* 项目「技术栈」chip 为空时必须不输出：空 <span class="stack"> 仍带 padding + border，
+   会渲染成一个小空框。项目独有技术名词改在描述 / 成果里自然提及，
+   通用栈（Spring Boot / Redis 等）由「专业技能」板块统一承载，不再逐项目罗列。 */
+(function () {
+  const mkDoc = (type, stackVal) => ({
+    data: {
+      name: 'T', subtitle: '', meta: '', contact: [],
+      sections: [{ id: 's1', type: type, title: '项目',
+        items: type === 'projects'
+          ? [{ name: 'P1', stack: stackVal, desc: '描述D', results: ['成果R'] }]
+          : [{ company: 'C', role: 'R', date: 'D', projects: [{ name: 'P1', stack: stackVal, desc: '描述D', results: ['成果R'] }] }] }]
+    },
+    fonts: {}, spacing: {}
+  });
+  ['projects', 'career'].forEach(function (type) {
+    const withStack = ResumeRender.buildResumeHtml(mkDoc(type, 'Spring Boot · Redis'));
+    const noStack = ResumeRender.buildResumeHtml(mkDoc(type, ''));
+    E(type + ' 技术栈非空时输出 stack chip',
+      withStack.indexOf('class="stack"') !== -1 && withStack.indexOf('Spring Boot · Redis') !== -1);
+    E(type + ' 技术栈为空时不输出 stack chip（不留空框）', noStack.indexOf('class="stack"') === -1);
+    E(type + ' 技术栈为空时标题/描述/成果照常渲染',
+      noStack.indexOf('P1') !== -1 && noStack.indexOf('描述D') !== -1 && noStack.indexOf('成果R') !== -1);
+  });
+})();
+
+/* ============ 分页「不切行」吸附（图片版 PDF 跨页切行 bug） ============
+   切片按内容区高度等分，切点落在文字行中间 → 那一行被拦腰截断。
+   snapBreaksToBoxes 是纯函数：给「会落墨的盒子」与「等分切点」，把切点上移到行间空档。
+   下面用等行距文本（行盒高 16px、行距 20px）模拟真实排版。 */
+(function () {
+  const snap = ResumeRender.snapBreaksToBoxes;
+  E('snapBreaksToBoxes 已导出', typeof snap === 'function');
+  if (typeof snap !== 'function') return;
+
+  /* 60 行文本：第 i 行占 [i*20, i*20+16] */
+  const lines = [];
+  for (let i = 0; i < 60; i++) lines.push({ top: i * 20, bottom: i * 20 + 16 });
+  const hard = (arr) => arr.map((y, i) => ({ y: y, hard: i === 0 || i === arr.length - 1 }));
+
+  /* 1) 切在行中间 → 上移到该行行盒顶部（这一行整体挪到下一页） */
+  const cutMid = snap(hard([0, 507, 1200]), lines, 36);
+  E('切点落在文字行内部时上移到该行顶部', cutMid[1] === 500);
+  E('吸附后长度与顺序不变（首/末边界保持）', cutMid.length === 3 && cutMid[0] === 0 && cutMid[2] === 1200);
+
+  /* 2) 本来就落在行间空档 → 原地不动（不制造无谓偏移） */
+  const cutGap = snap(hard([0, 498, 1200]), lines, 36);
+  E('切点已在行间空档时保持不动', cutGap[1] === 498);
+
+  /* 3) 切点正好压在行盒下沿（临界）→ 视为安全，不动 */
+  const cutEdge = snap(hard([0, 516, 1200]), lines, 36);
+  E('切点压在行盒边缘时不动（下半行从边缘起）', cutEdge[1] === 516);
+
+  /* 4) 多个盒子同时跨过切点（嵌套/大盒子）→ 迭代收敛到最上面那个盒子的顶
+        （总上移量 50px，这里把预算放宽到 60px 才够；预算不够时见第 5 条） */
+  const nested = [{ top: 480, bottom: 540 }, { top: 500, bottom: 560 }];
+  const cutNest = snap(hard([0, 530, 1200]), nested, 60);
+  E('多层盒子叠加跨过时收敛到最外层盒顶', cutNest[1] === 480);
+
+  /* 5) 上移量超预算 → 放弃吸附，保留原切点（宁可切一行，也不掏空半页） */
+  const cutBudget = snap(hard([0, 530, 1200]), nested, 10);
+  E('上移量超出预算时保留原切点', cutBudget[1] === 530);
+
+  /* 6) maxShift<=0 等于关闭吸附（老行为，供回退用） */
+  const cutOff = snap(hard([0, 507, 1200]), lines, 0);
+  E('maxShift=0 时不吸附', cutOff[1] === 507);
+
+  /* 7) 首行 / 末页边界 / 强制换页点（hard）永不吸附 */
+  const cutHard = snap([{ y: 0, hard: true }, { y: 507, hard: true }, { y: 1200, hard: true }], lines, 36);
+  E('hard（强制换页 / 末页边界）位置不吸附', cutHard[1] === 507);
+
+  /* 8) 没有墨盒（空文档）→ 原样返回，不崩 */
+  const cutEmpty = snap(hard([0, 507, 1200]), [], 36);
+  E('无墨盒时原样返回', cutEmpty[1] === 507 && cutEmpty.length === 3);
+
+  /* 9) 连续多页：每个自然分页点都要落在空档上（真实 3 页场景） */
+  const multi = snap(hard([0, 507, 1013, 1520, 2000]), lines, 36);
+  const hitAny = multi.slice(1, -1).some(function (y) {
+    return lines.some(function (b) { return b.top < y - 0.5 && b.bottom > y + 0.5; });
+  });
+  E('多页场景下所有自然分页点都不切行', hitAny === false);
+  E('多页吸附后仍单调不减', multi.every(function (v, i) { return i === 0 || v >= multi[i - 1]; }));
+
+  /* 10) 页底预算：随下边距变小而收缩，且有安全上下限 */
+  const budget = ResumeRender.pageSnapBudget(973);
+  E('pageSnapBudget 返回有限像素预算', budget >= 10 && budget <= 36);
+})();
+
+/* ============ 分页几何：内容区高度必须等于「纸张高 - 上下页边距」 ============
+   背景（2026-09-22 bug）：曾用 contentW * 297/210 当内容区高度 —— 把整张纸的长宽比
+   套在内容区宽度上，得出的是「以内容区为宽的整页高」，比真实可打印高度少
+   (top + bottom) * 297/210 ≈ 11mm/页。后果：图片版 PDF 每页少装一行半内容，
+   还把切片按 h/pageH * contentH 贴到纸上时纵向拉伸 4.5%（269/257.4），
+   与矢量版（Chrome 打印，内容盒实测 688×1017 px = 182×269 mm）对不上。 */
+(function(){
+  const { getPageMetrics, mmToPx } = ResumeRender;
+  /* 用一个假根节点直接量：getPageMetrics 只读 offsetWidth / offsetHeight */
+  const fake = function(w, h){ return { offsetWidth: w, offsetHeight: h }; };
+
+  // A4 210mm 宽在 96dpi 下 = 793.7px；边距 14mm（默认）
+  const m = getPageMetrics(fake(794, 2727));
+  E('A4 渲染宽度 ≈ 210mm', Math.abs(m.pageW - 794) < 1);
+  E('内容区宽度 = 210mm - 左右边距',
+    Math.abs(m.contentW - (794 - 2 * mmToPx(14))) < 0.01);
+  E('内容区高度 = 297 - 上下边距（= 269mm，而不是 contentW*297/210）',
+    Math.abs(m.pageH - mmToPx(269)) < 0.01);
+  E('内容区高度真的变了：旧算式会得到 257.4mm',
+    Math.abs(m.pageH - m.contentW * 297 / 210) > mmToPx(10));
+  E('内容区高度 mm 一并给出（供导出侧换算）', Math.abs(m.contentHmm - 269) < 0.01);
+  E('内容总高 = 元素高 - 上下 padding',
+    Math.abs(m.totalH - (2727 - 2 * mmToPx(14))) < 0.01);
+
+  /* 边距改变 → 可打印区域随之变化；非法值必须回退默认，不能变成 0 边距 */
+  const pm = ResumeRender.getPageMargins();
+  const saved = { top: pm.top, right: pm.right, bottom: pm.bottom, left: pm.left };
+  const setMargins = function(v){ pm.top = v; pm.right = v; pm.bottom = v; pm.left = v; };
+  setMargins(0);
+  E('页边距为 0 时内容区高度 = 整张纸 297mm',
+    Math.abs(getPageMetrics(fake(794, 2000)).pageH - mmToPx(297)) < 0.01);
+  setMargins(30);
+  E('页边距 30mm 时内容区高度 = 297-60 = 237mm',
+    Math.abs(getPageMetrics(fake(794, 2000)).pageH - mmToPx(237)) < 0.01);
+  pm.top = null; pm.bottom = '';
+  E('边距为 null/空串时按默认 14mm 计算（Number(null)===0 坑）',
+    Math.abs(getPageMetrics(fake(794, 2000)).pageH - mmToPx(297 - 14 - 14)) < 0.01);
+  pm.top = saved.top; pm.right = saved.right; pm.bottom = saved.bottom; pm.left = saved.left;
+  E('测试后边距已还原', pm.top === saved.top && pm.bottom === saved.bottom);
+  E('页面高度取整后与 688px 内容宽同源（矢量版内容盒实测 1017px）',
+    Math.abs(getPageMetrics(fake(794, 2000)).pageH - 1016.7) < 1);
+})();

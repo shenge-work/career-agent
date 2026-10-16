@@ -74,7 +74,12 @@ function makeCaptureClone(live){
   clone.querySelectorAll('[data-drag]').forEach(n=>n.removeAttribute('data-drag'));
   clone.querySelectorAll('[draggable]').forEach(n=>n.removeAttribute('draggable'));
   clone.querySelectorAll('.dragging,.drop-before,.drop-after').forEach(n=>n.classList.remove('dragging','drop-before','drop-after'));
-  clone.querySelectorAll('.reorder-btns').forEach(n=>n.remove());
+  /* ↑↓ 重排按钮是纯交互件，绝不能出现在截图里。
+     它们如今已被 CSS 移出布局流（绝对定位在内容左缘之外的页边距里，见 css/style.css
+     §"↑↓ 排序按钮"），不再影响任何高度；这里仍显式隐藏一遍是防御性的：
+     触屏 / 窄屏那两条 opacity:1 规则若不慎生效，也绝不会把箭头打进成品。
+     （注意：不要改成 remove()，也不必依赖它占位 —— 那条 153px 幽灵空行的历史教训见 CSS 注释。） */
+  clone.querySelectorAll('.reorder-btns').forEach(n=>{ n.style.visibility='hidden'; });
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
   return { wrapper, clone, totalW, totalH, pt, pr, pb, pl };
@@ -95,14 +100,24 @@ async function buildImagePdf(){
       width: cap.totalW, height: cap.totalH, windowWidth: cap.totalW, windowHeight: cap.totalH, x: 0, y: 0
     });
     const srcScale = canvas.width / cap.totalW;      // 截图实际像素 / CSS 宽度
-    const breaks = RB.computePageBreaks();              // 真实分页位置（已含强制换页，相对内容区域顶部）
+    /* 分页位置必须量「被截图的那个克隆节点」：实时预览与克隆是两棵 DOM，
+       拿预览的分页点去切克隆的像素，切行 bug 会以另一种形式复发。
+       computePageBreaks 内部已做「不切行」吸附（自然分页点上移到行间空白），
+       所以这里的切口不会再落在文字行中间。 */
+    const breaks = RB.computePageBreaks(cap.clone);
     const pages = Math.max(1, breaks.length - 1);
     const pdf = new jsPDFCtor('p','mm','a4');
     const PW = 210, PH = 297;
     const contentW = PW - margins.left - margins.right;
     const contentH = PH - margins.top - margins.bottom;
-    const contentWpx = cap.totalW - cap.pl - cap.pr; // 截图内容区域宽度（px）
-    const pageHpx = contentWpx * 297 / 210;          // A4 内容区域高度（px）
+    /* 内容区的 px→mm 换算必须与分页计算同源（RB.getPageMetrics）：
+       pageHpx = mmToPx(297 - 上边距 - 下边距)，也就是「一页纸真实能装多少 px 内容」。
+       历史 bug（2026-09-22 修）：这里曾写 contentWpx * 297/210，比真实值小 11mm/页，
+       于是每页少装一行半内容、且 (h/pageHpx)*contentH 把内容纵向拉伸 4.5%，
+       与矢量版 PDF（Chrome 打印）的版面必然对不上。 */
+    const metrics = RB.getPageMetrics(cap.clone);
+    const contentWpx = metrics ? metrics.contentW : (cap.totalW - cap.pl - cap.pr);
+    const pageHpx = metrics ? metrics.pageH : mmToPx(contentH);
     for(let i=0; i<pages; i++){
       const y = breaks[i];
       const h = breaks[i+1] - y;
@@ -117,8 +132,18 @@ async function buildImagePdf(){
       const img = pc.toDataURL('image/jpeg', 0.98);
       if(i>0) pdf.addPage();
       // 把内容区域图片放到 A4 的内容区域内（四边留出页边距，短页不拉伸）
-      const imgH = (h / pageHpx) * contentH;
-      pdf.addImage(img, 'JPEG', margins.left, margins.top, contentW, imgH);
+      let imgH = (h / pageHpx) * contentH;
+      let imgW = contentW, imgX = margins.left;
+      /* 分页吸附会让个别页比标准页高最多 ~36px（换算成毫米仍在页底余量内）。
+         万一还是越出纸张（极端：页边距设成 0），整体等比缩小一点点，
+         宁可缩 1%，也不让最后一行文字被 PDF 物理页边裁掉。 */
+      const maxH = PH - margins.top;
+      if(imgH > maxH){
+        const k = maxH / imgH;
+        imgH *= k; imgW *= k;
+        imgX = margins.left + (contentW - imgW) / 2;
+      }
+      pdf.addImage(img, 'JPEG', imgX, margins.top, imgW, imgH);
     }
     return { blob: pdf.output('blob'), pages };
   } finally {

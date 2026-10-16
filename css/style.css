@@ -499,9 +499,8 @@
      各行仍共用同一宽度，所以左右两列始终对齐。 */
   .resume .skill-group.skill-matrix{display:grid;grid-template-columns:calc(var(--font-base,12px) * 7.2) minmax(0,1fr);column-gap:12px;align-items:start;padding:5px 0;border-bottom:1px solid var(--paper-rule-soft);position:relative;}
   /* ⚠️ reorder-btns（↑↓）在屏幕上只是 opacity:0，仍会占掉第 1 个 grid 单元格，
-     把 skill-name 挤到右列、skill-body 换行掉进 86px 窄列（应用预览与独立导出页双双错位，
-     仅打印/PDF 因 print 媒体 display:none 幸免）。必须将其移出网格流，钉在行右上角。 */
-  .resume .skill-group.skill-matrix>.reorder-btns{position:absolute;top:5px;right:0;z-index:2;}
+     把 skill-name 挤到右列、skill-body 换行掉进 86px 窄列（应用预览与独立导出页双双错位）。
+     统一由下面 §"↑↓ 排序按钮" 的「绝对定位到页边距」规则接管（对 grid / 流式一律生效）。 */
   .resume .skill-group.skill-matrix:last-child{border-bottom:none;padding-bottom:0;}
   .resume .skill-name{font-size:calc(var(--font-base) + 0.5px);font-weight:700;color:var(--paper-text);line-height:1.75;}
   .resume .skill-body{min-width:0;}
@@ -527,18 +526,28 @@
   .resume .drop-before{box-shadow:inset 0 3px 0 var(--paper-rule);}
   .resume .drop-after{box-shadow:inset 0 -3px 0 var(--paper-rule);}
 
-  /* ↑↓ 排序按钮（触屏替代拖拽；桌面 hover 显形，移动端常显） */
+  /* —— ↑↓ 排序按钮（触屏替代拖拽；桌面 hover 显形，移动端常显）——
+     ⚠️ 必须「完全不参与布局流」：绝对定位钉在内容左缘之外的页边距里。
+     历史 bug（2026-09-22 修）：它是 inline-flex 实体盒子，只要参与流式排版，就会在
+     .job / .project 里各撑出一整行空白（本简历 8 处 = 153px），而打印时
+     @media print 又把它 display:none —— 于是「预览 / 图片版 PDF」比「矢量版 PDF（Chrome 打印）」
+     高出 153px，两条导出路径的分页必然对不上（同一份简历 3 页 vs 4 页）。
+     钉进页边距后：预览 / 图片版 / 矢量版三者内容流逐像素一致，也顺便把这 153px 还给正文。
+     用 translateX(-100%) 而不是写死负偏移：按钮紧贴内容左缘（鼠标从正文移到按钮上不闪），
+     宽度随字号变化也自动成立。 */
+  .resume .job,.resume .project,.resume .section-title,.resume .skill-group,.resume .adv-li{position:relative;}
   .resume .section-title{display:flex;align-items:center;gap:6px;}
   .resume .section-title .section-title-text{flex:1 1 auto;min-width:0;}
-  .resume .reorder-btns{opacity:0;display:inline-flex;gap:2px;flex:0 0 auto;vertical-align:middle;transition:opacity .12s;}
+  .resume .reorder-btns{position:absolute;left:0;top:0;transform:translateX(-100%);z-index:3;
+    opacity:0;display:inline-flex;flex-direction:column;gap:2px;transition:opacity .12s;}
   .resume .reorder-btn{font:inherit;line-height:1;cursor:pointer;border:1px solid var(--paper-rule,#ddd);background:var(--paper-card-bg,#fafafa);color:var(--paper-text);border-radius:4px;padding:0 5px;height:18px;font-size:11px;}
   .resume .reorder-btn:hover{background:var(--paper-rule-soft,#eee);}
-  .resume .section-title .reorder-btns{margin-left:auto;}
   .resume .adv-li:hover>.reorder-btns,
   .resume .job:hover>.reorder-btns,
   .resume .project:hover>.reorder-btns,
   .resume .skill-group:hover>.reorder-btns,
-  .resume .section-title:hover .reorder-btns{opacity:1;}
+  .resume .section-title:hover .reorder-btns,
+  .resume .reorder-btns:hover{opacity:1;}
   @media (hover:none){ .resume .reorder-btns{opacity:1;} }
   @media (max-width:640px){ .resume .reorder-btns{opacity:1;} }
   @media print{ .resume .reorder-btns{display:none !important;} }
@@ -645,13 +654,15 @@
     .resume{max-width:100% !important;width:100% !important;margin:0 !important;padding:0 !important;box-shadow:none !important;border-radius:0 !important;transform:none !important;}
     /* 背景色 / 边框精确打印（引用块底色、标签底色、分隔线等） */
     *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    /* 条目级分页保护：避免一条经历 / 项目被拦腰截断 */
-    .resume .job,.resume .project,.resume .skill-group,.resume .adv li,
-    .resume .card,.resume .item-row,
-    .resume .growth,.resume .growth-phase{ break-inside:avoid; }
-    /* 标题与首条内容不分离 */
-    .resume .section-title,.resume .job-title,.resume .job-role,.resume .project-title{ break-after:avoid; }
-    /* 保留数据里的「强制从新页开始」 */
+    /* ⚠️ 分页策略必须与「图片版 PDF / 预览分页参考线」完全一致（2026-09-22 修）。
+       图片版是「按内容区高度等分 → 把切口吸附到行间空白」切出来的（resume-render.js 的
+       computePageBreaks / snapBreaksToBoxes），它表达不了块级「整体不许断开」；
+       所以矢量侧也不能开，否则 Chrome 会把整块（一条经历 / 一个项目）推到下一页：
+       页底留大片空白、页数还会多出一页（本简历实测 4 页 vs 图片版 3 页）。
+       orphans/widows 的 CSS 默认值是 2，同样会让 Chrome 比切片更早断页，一并压到 1。
+       两边从此退化成同一条规则：每页尽量填满，断点只落在行框顶端。 */
+    .resume *{ break-inside:auto; break-after:auto; orphans:1; widows:1; }
+    /* 保留数据里的「强制从新页开始」（上面那条通配规则不碰 break-before） */
     .page-break-before{ break-before:page; }
   }
 
@@ -895,6 +906,18 @@
   .resume-item.is-locked .resume-item-title{color:var(--ui-muted);}
   .resume-item-lock{font-style:normal;}
   .resume-item-kind.is-public{color:var(--ui-danger);border-color:var(--ui-danger);}
+  /* 主简历（源头简历）：抽屉项左侧红条 + 标题内「主」红角标 + 缩略图左上红角标 */
+  .resume-item.is-master{box-shadow:inset 3px 0 0 var(--ui-danger);}
+  .resume-item.is-master.active{box-shadow:inset 3px 0 0 var(--ui-danger);}
+  .resume-item-kind.is-master{color:#fff;background:var(--ui-danger);}
+  /* 缩略图左上红角标：锚在 .resume-item（position:relative，padding 8px 12px），
+     盖在 50×71 缩略图左上角；不能放 thumb 里（renderDrawerThumbs 会覆盖 innerHTML） */
+  .drawer-master-badge{
+    position:absolute;top:8px;left:12px;z-index:2;
+    padding:0 4px;border-radius:3px 0 3px 0;
+    background:var(--ui-danger);color:#fff;
+    font-size:9px;font-weight:700;line-height:1.6;letter-spacing:.5px;
+  }
   /* 删除撤销条：底部居中，10 秒后自动消失（隐藏用 visibility，避免读屏读到） */
   .undo-toast{
     position:fixed;left:50%;bottom:24px;transform:translate(-50%,12px);

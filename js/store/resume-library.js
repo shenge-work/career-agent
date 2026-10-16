@@ -195,7 +195,10 @@
     /* N3 分享与权限 */
     isPublic: function (v) { return !!v; },
     isLocked: function (v) { return !!v; },
-    shareToken: function (v) { return v == null ? null : String(v); }
+    shareToken: function (v) { return v == null ? null : String(v); },
+    /* 主简历（唯一身份标识，互斥）：库里恰好一份 isMaster=true。
+       缺省即非主；由 setMaster() 互斥设置，init() 在空标识时自动播种源头简历。 */
+    isMaster: function (v) { return !!v; }
   };
   function applyMetaFields(m, meta) {
     if (!m || !meta || typeof meta !== 'object') return;
@@ -226,17 +229,48 @@
     /* 注入存储后端（原生壳就绪后由 native-bridge.js 调用） */
     setBackend: setBackend,
 
-    /* 初始化：加载索引与激活 id；空库由调用方（app.js）用种子数据 create 完成 */
+    /* 初始化：加载索引与激活 id；空库由调用方（app.js）用种子数据 create 完成。
+       自动播种「主简历」：库里没有任何 isMaster=true 时，把「源头简历」标为主
+       —— 有派生子简历的母简历 > 最近更新的非派生项 > 最近更新的一份。
+       用户日后手动取消主标识后（库里无主），下次启动回落到源头简历，符合「主=角色、源头为默认持有者」。 */
     init: function () {
       return readIndex().then(function () {
-        return { activeId: _activeId, count: (_index || []).length };
+        var idx = _index || [];
+        var hasMaster = idx.some(function (m) { return m.isMaster; });
+        var seeded = false;
+        if (!hasMaster && idx.length) {
+          var master = null;
+          var parents = {};
+          idx.forEach(function (m) { if (m.parentId) parents[m.parentId] = true; });
+          for (var i = 0; i < idx.length; i++) {
+            if (parents[idx[i].id]) { master = idx[i]; break; }
+          }
+          if (!master) {
+            var nonDerived = idx.filter(function (m) { return m.kind !== 'derived'; });
+            nonDerived.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+            master = nonDerived[0] || null;
+          }
+          if (!master) {
+            master = idx.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0];
+          }
+          if (master) { master.isMaster = true; seeded = true; }
+        }
+        var result = { activeId: _activeId, count: (_index || []).length };
+        /* 仅当本次真正播种了主简历才写回索引（避免每次启动都重写 index.json） */
+        if (!seeded) return result;
+        return writeIndex().then(function () { return result; });
       });
     },
 
-    /* 列出全部简历元数据（不含正文），按 updatedAt 倒序 */
+    /* 列出全部简历元数据（不含正文）：主简历置顶，其余按 updatedAt 倒序。
+       主简历是唯一身份标识，排在列表第一即「源头简历」恒在最前。 */
     list: function () {
       return readIndex().then(function (idx) {
-        return idx.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+        return idx.slice().sort(function (a, b) {
+          var am = a.isMaster ? 1 : 0, bm = b.isMaster ? 1 : 0;
+          if (am !== bm) return bm - am;
+          return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
       });
     },
 
@@ -289,6 +323,19 @@
     /* 加载某份简历的完整载荷；不存在返回 null */
     load: function (id) {
       return detectBackend().loadDoc(id).then(function (doc) { return doc || null; });
+    },
+
+    /* N11 本地版本历史：不经索引、不碰 index.json 的底层文档读写通道。
+       local-history.js 用它存取 `{id}_versions` 分文档（版本链），
+       避免每次追加版本都触发 writeIndex（写 index.json）。 */
+    loadDocRaw: function (id) {
+      return detectBackend().loadDoc(id).then(function (doc) { return doc || null; });
+    },
+    saveDocRaw: function (id, doc) {
+      return detectBackend().saveDoc(id, doc).then(function () { return doc; });
+    },
+    removeDocRaw: function (id) {
+      return detectBackend().removeDoc(id);
     },
 
     /* 保存某份简历（写入本地文档 + 更新索引 updatedAt/title/lastHash 等元数据）。
@@ -446,6 +493,23 @@
     },
     getActive: function () {
       return readActiveId();
+    },
+
+    /* 设置 / 取消「主简历」（互斥，库里唯一）。
+       - 把 id 标为 isMaster=true，同时清掉其它所有简历的 isMaster；
+       - 若 id 已是主 → 取消（清掉它的 isMaster，库里暂时无主，下次启动自动回落到源头简历）。
+       返回 Promise<boolean>：true=已设为唯一主，false=已取消主标识。 */
+    setMaster: function (id) {
+      return readIndex().then(function () {
+        var idx = _index || [];
+        var target = null;
+        for (var i = 0; i < idx.length; i++) { if (idx[i].id === id) { target = idx[i]; break; } }
+        if (!target) return false;
+        var wasMaster = !!target.isMaster;
+        idx.forEach(function (m) { if (m.isMaster) delete m.isMaster; });
+        if (!wasMaster) target.isMaster = true;
+        return writeIndex().then(function () { return !wasMaster; });
+      });
     },
 
     /* 当前实际生效的存储类型（供 UI 显示准确的持久化状态提示）：

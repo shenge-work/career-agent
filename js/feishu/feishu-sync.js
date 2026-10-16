@@ -70,7 +70,7 @@ async function pullFromFeishu(){
   showFeishuStatus('正在从飞书拉取最新版本…');
   try {
     const obj = await ResumeStore.pull(id);
-    RB.recordHistory('action');
+    RB.recordHistory('action', '从飞书恢复');
     RB.applyDataPayload(obj);
     showFeishuStatus('✓ 已从飞书拉取最新版本');
     await markManualPullBaseline(obj);
@@ -88,7 +88,7 @@ async function restoreFromFeishu(versionId){
   showFeishuStatus('正在从飞书恢复…');
   try {
     const obj = await ResumeStore.restore(versionId, id);
-    RB.recordHistory('action');
+    RB.recordHistory('action', '从飞书恢复');
     RB.applyDataPayload(obj);
     showFeishuStatus('✓ 已从飞书恢复该版本');
     await markManualPullBaseline(obj);

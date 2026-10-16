@@ -167,7 +167,7 @@
         '    <div class="settings-row">' +
         '      <div class="settings-row-text">' +
         '        <div class="settings-row-title">历史版本</div>' +
-        '        <div class="settings-row-desc">查看飞书云端的历史版本并恢复</div>' +
+        '        <div class="settings-row-desc">查看本地版本历史与飞书云端版本，随时回溯恢复</div>' +
         '      </div>' +
         '      <button type="button" class="lib-btn" id="setHistoryBtn">查看历史版本</button>' +
         '    </div>' +

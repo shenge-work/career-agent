@@ -216,10 +216,14 @@
       var html = items.map(function (meta) {
         var derived = meta.kind === 'derived';
         var locked = isLockedMeta(meta);
+        var master = !!meta.isMaster;
         var title = String(meta.title == null ? '' : meta.title);
         return '' +
-          '<div class="lib-card' + (derived ? ' is-derived' : '') + (locked ? ' is-locked' : '') + '"' +
+          '<div class="lib-card' + (derived ? ' is-derived' : '') + (locked ? ' is-locked' : '') + (master ? ' is-master' : '') + '"' +
               ' data-id="' + esc(meta.id) + '" data-full-title="' + esc(title) + '">' +
+          /* ⚠️ 主角标必须是 .lib-card 的直接子元素，不能放进 .lib-card-thumb ——
+             renderThumbs() 会用简历预览 HTML 整体覆盖 thumb 的 innerHTML，放里面会被抹掉 */
+          (master ? '<span class="lib-master-badge" title="主简历 · 源头简历">主</span>' : '') +
           '  <div class="lib-card-thumb resume-thumb" data-thumb-id="' + esc(meta.id) + '"></div>' +
           '  <div class="lib-card-body">' +
           /* 名称最多两行（CSS line-clamp）；仍放不下时由 markClippedTitles() 加 is-clipped，
@@ -315,6 +319,7 @@
       menu.innerHTML =
         '<button type="button" data-act="rename">重命名</button>' +
         '<button type="button" data-act="tags">🏷 编辑标签</button>' +
+        '<button type="button" data-act="master">' + (meta.isMaster ? '取消主简历' : '设为主简历') + '</button>' +
         '<button type="button" data-act="lock">' + (locked ? '解锁编辑' : '🔒 锁定防误改') + '</button>' +
         '<button type="button" data-act="public">' + (pub ? '关闭分享' : '开启分享') + '</button>' +
         (pub && hasToken ? '<button type="button" data-act="token">复制分享标识</button>' : '') +
@@ -332,6 +337,7 @@
         self.closeMenu();
         if (act === 'rename') self.handleRename(id);
         else if (act === 'tags') self.handleSetTags(id);
+        else if (act === 'master') self.handleSetMaster(id);
         else if (act === 'lock') self.handleToggleLock(id);
         else if (act === 'public') self.handleTogglePublic(id);
         else if (act === 'token') self.handleCopyToken(id);
@@ -385,6 +391,16 @@
       var self = this;
       if (global.ResumeEditor && typeof global.ResumeEditor.resumeSetTags === 'function') {
         Promise.resolve(global.ResumeEditor.resumeSetTags(id)).then(function () {
+          self.refresh();
+        });
+      }
+    },
+
+    /* 主简历：设 / 取消（互斥，库里唯一）。改完重渲染卡片网格（角标 + 排序即时更新） */
+    handleSetMaster: function (id) {
+      var self = this;
+      if (global.ResumeLibrary && typeof global.ResumeLibrary.setMaster === 'function') {
+        Promise.resolve(global.ResumeLibrary.setMaster(id)).then(function () {
           self.refresh();
         });
       }

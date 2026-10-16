@@ -125,8 +125,10 @@ function renderResumeInner(){
         (job.projects||[]).forEach((p,pi)=>{
           const projBreak = p.pageBreak ? ' page-break-before' : '';
           h+=`<div class="project nested${projBreak}" data-drag="proj:${secIdEsc}:${i}:${pi}" draggable="true" style="${spacingStyle('project', p.spacing)}">${reorderBtns('proj', secIdEsc, i, pi)}`;
-          h+=`<p class="project-title" style="${spacingStyle('pTitle', p.nameSpacing)}">${esc(T(p.name))}</p>`
-            +`<span class="stack" style="${spacingStyle('pStack', p.stackSpacing)}">${esc(T(p.stack))}</span>`;
+          h+=`<p class="project-title" style="${spacingStyle('pTitle', p.nameSpacing)}">${esc(T(p.name))}</p>`;
+          /* 技术栈 chip 为空时不输出：否则空 span 仍带 padding/border，会渲染成一个小空框。
+             项目特有技术名词改在项目描述 / 成果里自然提及，通用栈（Spring Boot / Redis 等）不再单列。 */
+          if(T(p.stack).trim()) h+=`<span class="stack" style="${spacingStyle('pStack', p.stackSpacing)}">${esc(T(p.stack))}</span>`;
           const pQuote = p.descQuote !== false;
           const pColor = esc(p.descColor || '#888888');
           const pQStyle = pQuote ? `padding:6px 0 6px 10px;border-left:2px solid ${pColor};background:var(--paper-card-bg,#fafafa);` : '';
@@ -145,8 +147,8 @@ function renderResumeInner(){
       sec.items.forEach((p,i)=>{
         const projBreak = p.pageBreak ? ' page-break-before' : '';
         h+=`<div class="project nested${projBreak}" data-drag="item:${secIdEsc}:${i}" draggable="true" style="${spacingStyle('project', p.spacing)}">${reorderBtns('item', secIdEsc, i, null)}`;
-        h+=`<p class="project-title" style="${spacingStyle('pTitle', p.nameSpacing)}">${esc(T(p.name))}</p>`
-          +`<span class="stack" style="${spacingStyle('pStack', p.stackSpacing)}">${esc(T(p.stack))}</span>`;
+        h+=`<p class="project-title" style="${spacingStyle('pTitle', p.nameSpacing)}">${esc(T(p.name))}</p>`;
+        if(T(p.stack).trim()) h+=`<span class="stack" style="${spacingStyle('pStack', p.stackSpacing)}">${esc(T(p.stack))}</span>`;
         const pQuote = p.descQuote !== false;
         const pColor = esc(p.descColor || '#888888');
         const pQStyle = pQuote ? `padding:6px 0 6px 10px;border-left:2px solid ${pColor};background:var(--paper-card-bg,#fafafa);` : '';
@@ -590,42 +592,221 @@ function resetMargins(){ RB.recordHistory('action'); data.pageMargins = JSON.par
 /* ============ A4 分页参考线（与 PDF 截图分页严格对齐，支持强制换页） ============ */
 let guidesOn = false;
 /* 以 A4 210 mm 为基准，把页边距去掉后得到内容区域；
-   分页参考线与图片版 PDF 都按内容区域高度计算。 */
-function getPageMetrics(){
-  const resume = preview.querySelector('.resume');
+   分页参考线与图片版 PDF 都按内容区域高度计算。
+   ⚠️ 内容区高度必须是「纸张高 - 上下页边距」= (297 - top - bottom) mm。
+   历史 bug（2026-09-22 修）：这里曾写 contentW * 297/210 —— 把整张纸的长宽比套在内容区
+   宽度上，得到的是「以内容区为宽的整页高」，比真实可打印高度少 (top+bottom)*(297/210)
+   ≈ 11mm/页。后果是三条链路互相打架：
+     · 预览分页参考线比真实纸面页底高 11mm；
+     · 图片版 PDF 每页少装 11mm 内容（同样的简历多出一页），且把切片按
+       h/pageH * contentH 贴到纸上时纵向被拉伸 269/257.4 = 4.5%（字被压扁/拉长）；
+     · 矢量版（Chrome 打印，内容盒实测 688×1017 px = 182×269 mm）与上面两者都对不上。
+   root 可选：导出时要量「被截图的那个克隆节点」（它与实时预览同宽同 padding，
+   传进来才能保证切口与实际截到的像素严格对齐）；不传则量实时预览。 */
+function getPageMetrics(root){
+  const resume = root || preview.querySelector('.resume');
   if(!resume) return null;
   const m = getPageMargins();
   const pl = mmToPx(m.left), pr = mmToPx(m.right), pt = mmToPx(m.top), pb = mmToPx(m.bottom);
   const pageW = resume.offsetWidth;       // A4 实际渲染宽度（px）
   const contentW = pageW - pl - pr;       // A4 内容区域宽度（px）
-  const pageH = contentW * 297 / 210;     // A4 内容区域高度（px）
+  /* 内容区高度（px）：纸张 297mm 去掉上下页边距。safeMm 兜底 null/非法值（Number(null)===0 坑） */
+  const contentHmm = Math.max(1, 297 - safeMm(m.top, 14) - safeMm(m.bottom, 14));
+  const pageH = mmToPx(contentHmm);       // A4 内容区域高度（px）
   const totalH = Math.max(0, resume.offsetHeight - pt - pb); // 内容总高度（px）
-  return { resume, pageW, contentW, pageH, totalH, pt, pr, pb, pl };
+  return { resume, pageW, contentW, pageH, contentHmm, totalH, pt, pr, pb, pl };
 }
+/* ============ 分页「不切行」吸附 ============
+   问题：图片版 PDF 按「内容区高度等分」切片，切点落在文字行中间时，那一行会被拦腰
+   截断（上半行留在这页底部、下半行跑到下页顶部），导出成品看着像渲染坏了。
+   做法：把每个「自然分页点」上移到此点之前最近的、不与任何内容相交的位置（行间空白 /
+   段落间距），再交给导出切片；分页参考线用同一份结果绘制，所以预览里的分页线与
+   导出 PDF 的切口依然严格对齐。
+   不参与吸附的位置：首行（0）、强制换页点（.page-break-before）、末页边界（内容总高）。
+   分两层：collectInkBoxes 量 DOM（含单位换算），snapBreaksToBoxes 是纯函数（可单测）。 */
+
+/* 量出 .resume 内所有「会落到纸上」的盒子，换算成内容区坐标（px，已抵消预览等比缩放）。
+   三类来源：
+   1) 文本行盒：Range 覆盖每个文本节点，逐行一个 rect —— 简历里 99% 的墨都在这里；
+   2) 替换元素：img / svg / canvas / video …（Range 量不到，但一样会被切）
+   3) 跨过候选切点的元素框线：1~2px 分隔线被切一半同样难看（板块标题下的横线等）。
+      只对「正好跨过候选切点」的元素读 computedStyle，避免每次重绘全量读样式。 */
+function collectInkBoxes(resume, metrics, cands){
+  const out = [];
+  if(!resume || typeof resume.getBoundingClientRect !== 'function') return out;
+  let base;
+  try{ base = resume.getBoundingClientRect(); }catch(e){ return out; }
+  const layoutW = z(resume.offsetWidth);
+  const scale = layoutW > 0 ? (base.width / layoutW) : 1;   // transform:scale 补偿
+  if(!(scale > 0)) return out;
+  const pt = metrics ? z(metrics.pt) : 0;
+  /* 入参是设备像素（getBoundingClientRect 的坐标系），出口统一换成内容区坐标 */
+  const push = function(topDev, bottomDev){
+    const t = (topDev - base.top) / scale - pt;
+    const b = (bottomDev - base.top) / scale - pt;
+    if(b - t > 0.4) out.push({ top: t, bottom: b });
+  };
+  const pushRect = function(r){
+    if(!r) return;
+    if(!(r.width > 0.5) || !(r.height > 0.5)) return;
+    push(r.top, r.bottom);
+  };
+  const safeRect = function(el){
+    try{ return el.getBoundingClientRect(); }catch(e){ return null; }
+  };
+
+  /* 1) 文本行盒 —— Range 覆盖文本节点，逐行给出 rect */
+  const doc = resume.ownerDocument || (typeof document !== 'undefined' ? document : null);
+  if(doc && typeof doc.createRange === 'function' && typeof doc.createTreeWalker === 'function'){
+    const range = doc.createRange();
+    if(range && typeof range.getClientRects === 'function' && typeof range.selectNodeContents === 'function'){
+      let walker = null;
+      try{ walker = doc.createTreeWalker(resume, 4 /* NodeFilter.SHOW_TEXT */, null, false); }catch(e){ walker = null; }
+      if(walker){
+        /* 上限只是防「桩对象返回自己」这类死循环，正常文本节点数远小于它 */
+        for(let guard=0; guard<20000; guard++){
+          let node = null;
+          try{ node = walker.nextNode(); }catch(e){ break; }
+          if(!node) break;
+          const txt = node.nodeValue;
+          if(!txt || !txt.trim()) continue;
+          const pe = node.parentElement;
+          /* ↑↓ 重排按钮不进导出（克隆时被删掉），别让它们的箭头影响吸附结果 */
+          if(pe && typeof pe.closest === 'function' && pe.closest('.reorder-btns')) continue;
+          try{
+            range.selectNodeContents(node);
+            const rects = range.getClientRects();
+            for(let i=0;i<rects.length;i++) pushRect(rects[i]);
+          }catch(e){}
+        }
+      }
+    }
+  }
+
+  /* 2) 替换元素（没有文本节点，但一样占纸面） */
+  if(typeof resume.querySelectorAll === 'function'){
+    let atoms = null;
+    try{ atoms = resume.querySelectorAll('img,svg,canvas,video,iframe,object,embed'); }catch(e){ atoms = null; }
+    if(atoms) for(let i=0;i<atoms.length;i++) pushRect(safeRect(atoms[i]));
+  }
+
+  /* 3) 框线：只处理正好跨过候选切点的元素，避免全量 computedStyle 开销 */
+  const gcs = (global && typeof global.getComputedStyle === 'function') ? global.getComputedStyle : null;
+  if(gcs && cands && cands.length && typeof resume.querySelectorAll === 'function'){
+    let els = null;
+    try{ els = resume.querySelectorAll('*'); }catch(e){ els = null; }
+    if(els){
+      for(let i=0;i<els.length;i++){
+        const el = els[i];
+        if(el === resume) continue;                 // 根节点自身（整页背景）不算墨
+        const r = safeRect(el);
+        if(!r || !(r.height > 0.5) || !(r.width > 0.5)) continue;
+        const t = (r.top - base.top) / scale - pt, b = (r.bottom - base.top) / scale - pt;
+        let hit = false;
+        for(let k=0;k<cands.length;k++){
+          if(t < cands[k] - 0.5 && b > cands[k] + 0.5){ hit = true; break; }
+        }
+        if(!hit) continue;
+        let cs = null;
+        try{ cs = gcs(el); }catch(e){ cs = null; }
+        if(!cs) continue;
+        const bw = function(k){ const v = parseFloat(cs[k]); return isNaN(v) ? 0 : v; };
+        const bt = bw('borderTopWidth'), bb = bw('borderBottomWidth');
+        const bl = bw('borderLeftWidth'), br = bw('borderRightWidth');
+        /* 横线只占一条细带：把那条带标成墨即可（切点会挪到它上面一点点） */
+        if(bt > 0.2) push(r.top, r.top + bt * scale);
+        if(bb > 0.2) push(r.bottom - bb * scale, r.bottom);
+        /* 竖线（左侧引用条等）一旦被切断就是断口，整块让到下一页更稳 */
+        if(bl > 0.2 || br > 0.2) push(r.top, r.bottom);
+      }
+    }
+  }
+  return out;
+}
+
+/* 纯函数：把分页点吸附到「不与任何内容盒相交」的位置。
+   breaks: [{ y, hard }]（升序，内容区坐标 px；hard=true 的位置不参与吸附）
+   boxes : [{ top, bottom }]（会落墨的盒子）
+   maxShift: 单个分页点最多上移多少 px（<=0 表示关闭吸附）
+   返回 y 数组（与 breaks 等长、单调不减）。
+   ⚠️ 窗口内找不到空档时保留原几何切点：宁可切一行，也不要把整页掏空成半页。 */
+function snapBreaksToBoxes(breaks, boxes, maxShift){
+  const list = [];
+  (boxes || []).forEach(function(b){ if(b && (b.bottom - b.top) > 0.4) list.push(b); });
+  const src = breaks || [];
+  const out = [];
+  const shift = z(maxShift);
+  for(let i=0;i<src.length;i++){
+    const cur = src[i] || { y: 0, hard: true };
+    let y = z(cur.y);
+    if(!cur.hard && i > 0 && shift > 0 && list.length){
+      const floor = Math.max(z(out[i-1]) + 1, y - shift);
+      let probe = y;
+      /* 每轮至少上移 0.5px，所以循环次数必然收敛；guard 只是防御性上限 */
+      for(let guard=0; guard<list.length+1; guard++){
+        let bestTop = -Infinity;
+        for(let k=0;k<list.length;k++){
+          const b = list[k];
+          if(b.top < probe - 0.5 && b.bottom > probe + 0.5 && b.top > bestTop) bestTop = b.top;
+        }
+        if(bestTop === -Infinity) break;            // 落在空档 → 收敛
+        if(bestTop < floor){ probe = null; break; } // 上移量超预算 → 放弃吸附
+        probe = bestTop;
+      }
+      if(probe !== null) y = Math.round(probe);
+    }
+    out.push(y);
+  }
+  return out;
+}
+
+/* 单个分页点最多能上移多少 px：吸附会让那一页变高，而切片按
+   (h / pageH) * contentH 换算成毫米贴到纸上 —— 页底最多还能吃掉 80% 下边距
+   而不越出纸张（越出会被 PDF 物理页边裁掉）。下限 10px 保证 0 页边距时也能救回切行，
+   上限 36px 防止一页被塞得过满。 */
+function pageSnapBudget(pageHpx){
+  const m = getPageMargins();
+  const contentH_mm = Math.max(1, 297 - z(m.top) - z(m.bottom));
+  const mmPerPx = contentH_mm / Math.max(1, z(pageHpx));
+  const budget = (z(m.bottom) * 0.8) / mmPerPx;
+  return Math.max(10, Math.min(36, Math.round(budget)));
+}
+
 // 计算真实分页位置：先收集右侧勾选的「强制换页」元素 offsetTop，再与自然 A4 高度取并集
-// 返回的 break 值是相对于内容区域顶部的偏移（不含上页边距）
-function computePageBreaks(){
-  const m = getPageMetrics();
+// 返回的 break 值是相对于内容区域顶部的偏移（不含上页边距）；自然分页点已做「不切行」吸附
+function computePageBreaks(root){
+  const m = getPageMetrics(root);
   if(!m) return [];
   const { resume, pageH, totalH, pt } = m;
   const forced = Array.from(resume.querySelectorAll('.page-break-before'))
     .map(el => (el.offsetTop - resume.offsetTop) - pt)
     .filter(y => y > 2)
     .sort((a, b) => a - b);
-  const breaks = [0];
+  const marks = [{ y: 0, hard: true }];
   let last = 0;
   for(const y of forced){
     let cy = last;
-    while(cy + pageH < y - 1){ cy += pageH; breaks.push(cy); }
-    breaks.push(y);
+    while(cy + pageH < y - 1){ cy += pageH; marks.push({ y: Math.round(cy), hard: false }); }
+    marks.push({ y: Math.round(y), hard: true });   // 强制换页点：切在板块顶上，不允许上移
     last = y;
   }
   let cy = last;
-  while(cy + pageH < totalH - 1){ cy += pageH; breaks.push(cy); }
+  while(cy + pageH < totalH - 1){ cy += pageH; marks.push({ y: Math.round(cy), hard: false }); }
   // 最后一页边界
-  if(breaks[breaks.length-1] < totalH - 1) breaks.push(totalH);
-  // 去重并排序（浮点像素可能产生极小误差，取整）
-  return [...new Set(breaks.map(v => Math.round(v)))].sort((a, b) => a - b);
+  if(marks[marks.length-1].y < totalH - 1) marks.push({ y: Math.round(totalH), hard: true });
+  // 去重并排序（浮点像素可能产生极小误差，取整）；同一点上 hard 优先（不可吸附）
+  const byY = new Map();
+  marks.forEach(k => { byY.set(k.y, k.hard || !!byY.get(k.y)); });
+  const list = [];
+  byY.forEach((hard, y) => list.push({ y: y, hard: hard }));
+  list.sort((a, b) => a.y - b.y);
+  // 吸附：把自然分页点挪到行间空白处，避免把文字行 / 图片 / 分隔线切成两半
+  const snappable = [];
+  list.forEach(k => { if(!k.hard) snappable.push(k.y); });
+  if(!snappable.length) return list.map(k => k.y);
+  let boxes = [];
+  try{ boxes = collectInkBoxes(resume, m, snappable); }catch(e){ boxes = []; }
+  return snapBreaksToBoxes(list, boxes, pageSnapBudget(pageH));
 }
 function drawPageGuides(){
   preview.querySelectorAll('.page-guide').forEach(g=>g.remove());
@@ -874,6 +1055,7 @@ global.ResumeRender = {
   renderMarginSettings: renderMarginSettings, resetMargins: resetMargins,
   // page guides
   getPageMetrics: getPageMetrics, computePageBreaks: computePageBreaks,
+  collectInkBoxes: collectInkBoxes, snapBreaksToBoxes: snapBreaksToBoxes, pageSnapBudget: pageSnapBudget,
   drawPageGuides: drawPageGuides, toggleGuides: toggleGuides,
   applyPreviewScale: applyPreviewScale,
   schedulePreviewScale: schedulePreviewScale,

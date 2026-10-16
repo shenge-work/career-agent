@@ -26,9 +26,12 @@
     '    <span class="rail-icon" aria-hidden="true">☰</span>' +
     '    <span class="rail-label">投递</span>' +
     '  </button>' +
-    '  <button type="button" class="rail-item" data-action="ai-toggle" title="AI 助手 (Ctrl/Cmd+K)">' +
+    /* AI 整条链路（presets / provider / 面板交互）尚未开发完：置灰 + 「开发中」徽标，
+       disabled 阻断点击；等链路收口后去掉 disabled / is-disabled / 徽标即可恢复。 */
+    '  <button type="button" class="rail-item is-disabled" data-action="ai-toggle" title="AI 助手（开发中）" disabled>' +
     '    <span class="rail-icon" aria-hidden="true">✦</span>' +
     '    <span class="rail-label">AI</span>' +
+    '    <span class="rail-wip-badge" aria-hidden="true">开发中</span>' +
     '  </button>' +
     '  <button type="button" class="rail-item" data-nav="/settings" title="设置">' +
     '    <span class="rail-icon" aria-hidden="true">⚙</span>' +
@@ -56,9 +59,10 @@
 
   function bindNav() {
     railEl.addEventListener('click', function (e) {
-      // data-action 按钮（非路由）：如 AI 开关
+      // data-action 按钮（非路由）：如 AI 开关（disabled 的 WIP 项不响应）
       var actionBtn = e.target.closest ? e.target.closest('[data-action]') : null;
       if (actionBtn) {
+        if (actionBtn.disabled) return;
         var act = actionBtn.getAttribute('data-action');
         if (act === 'ai-toggle' && global.AIPanel) global.AIPanel.toggle();
         return;

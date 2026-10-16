@@ -306,6 +306,8 @@
 <script src="js/store/resume-store.js"></script>
 <!-- M1 多简历仓库：必须在 app.js 之前加载，保证 window.ResumeLibrary 先于 app.js 可用 -->
 <script src="js/store/resume-library.js"></script>
+<!-- N11 本地版本历史：复用 ResumeLibrary 分文档通道，须在 resume-library 之后、adapter-local 之前 -->
+<script src="js/store/local-history.js"></script>
 <!-- P2 原生桥：仅在 Tauri 壳内注入 window.__RESUME_NATIVE__，浏览器下不做任何事 -->
 <script src="js/store/native-bridge.js"></script>
 <!-- A5 经历素材库：STAR 片段复用（localStorage，独立于简历数据，不随飞书同步） -->

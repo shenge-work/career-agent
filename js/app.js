@@ -52,18 +52,77 @@ function restoreSnapshot(s){
   }catch(e){ return; }
   renderSettings(); renderMarginSettings(); renderSpacingSettings(); renderEditor(); renderPreview(); applyPanelState();
 }
+/* ============ N11 本地版本历史：把 undo 快照持久化到本地版本链 ============
+   版本链 = undo 栈的「持久化超集」，回滚版本与撤销同构（restoreSnapshot）。
+   单份模式（activeResumeId 为 null）用 'default' 兜底，与历史面板的 resumeId 取法一致。 */
+function localHistoryResumeId(){ return activeResumeId || 'default'; }
+function localHistory(){
+  const LH = global.ResumeLocalHistory;
+  return (LH && typeof LH.append === 'function') ? LH : null;
+}
+/* 追加一条本地版本（异步、静默降级：记历史失败绝不打断编辑）。 */
+function appendLocalVersion(snap, label, source, name){
+  const LH = localHistory();
+  if(!LH) return;
+  const id = localHistoryResumeId();
+  try{
+    LH.append(id, {
+      versionId: LH.genVersionId(Date.now()),
+      timestamp: Date.now(),
+      label: label || '编辑',
+      source: source || 'auto',
+      name: name || null,
+      snapshot: snap
+    });
+  }catch(e){ /* 静默 */ }
+}
+/* 列出本地版本（时间倒序）。无模块 / 失败返回空数组。 */
+async function listLocalVersions(){
+  const LH = localHistory();
+  if(!LH) return [];
+  try{ return await LH.list(localHistoryResumeId()); }catch(e){ return []; }
+}
+/* 回滚到某本地版本：先「把当前内容存为新版本」再应用目标（回滚可逆、不丢当前）。
+   返回 true=成功；false=版本不存在 / 快照损坏。
+   N3 互补：锁定简历只读——恢复会覆盖正文，锁定态下拒绝（浏览历史 / 手动快照不受限）。 */
+async function restoreLocalVersion(versionId){
+  const LH = localHistory();
+  if(!LH) return false;
+  if(isActiveLocked()){ notifyUser('warn', '简历已锁定', '锁定状态下不能恢复历史版本；先在「我的简历」里解锁再试。'); return false; }
+  const id = localHistoryResumeId();
+  let target;
+  try{ target = await LH.restore(id, versionId); }catch(e){ target = null; }
+  if(!target || !target.data) return false;
+  /* 先存当前为新版本（复用 recordHistory：入栈当前快照 + 落一条持久化版本） */
+  recordHistory('action', '恢复');
+  restoreSnapshot(JSON.stringify(target));
+  if(bootDone){ markDirty(activeResumeId); saveState(); }
+  return true;
+}
+/* 手动命名快照：给当前状态打一个可定位的版本点（不入 undo 栈、不打断撤销）。 */
+async function saveManualSnapshot(name){
+  const LH = localHistory();
+  if(!LH) return false;
+  appendLocalVersion(snapshot(), '手动快照', 'manual', name || null);
+  return true;
+}
 /* 记录一次变更。kind 相同且时间相近的连续「编辑/设置」会合并为一个撤销步（避免逐字符/逐格历史爆炸）；
-   'action' 类（增删/移动/拖拽/导入/重置）每次都是独立可撤销步，不合并 */
-function recordHistory(kind){
+   'action' 类（增删/移动/拖拽/导入/重置）每次都是独立可撤销步，不合并。
+   N11：label 为版本历史的来源语义（'编辑'|'导入'|'重置'|'从飞书恢复'|'手动快照'），
+   缺省按 kind 映射；关键 action（导入/重置/恢复）由调用点显式传入。 */
+function recordHistory(kind, label){
   bindHist(activeResumeId);
   const now = Date.now();
   if((kind==='edit' || kind==='setting') && hist.last.kind===kind && (now - hist.last.t) < 700){ hist.last.t = now; return; }
-  hist.undo.push(snapshot());
+  const snap = snapshot();
+  hist.undo.push(snap);
   if(hist.undo.length > HIST_MAX) hist.undo.shift();
   hist.redo.length = 0;
   hist.last = { kind, t: now };
   updateUndoButtons();
   markDirty(activeResumeId);
+  /* N11：undo 快照入栈的同时，向本地持久化版本链追加一条（异步、静默降级） */
+  appendLocalVersion(snap, label || '编辑');
 }
 function undo(){
   bindHist(activeResumeId);
@@ -388,6 +447,8 @@ async function resumeRemove(id){
   try{
     global.ResumeLibrary.beginRemoveBatch();
     await global.ResumeLibrary.remove(id);
+    /* N11：删除简历时一并清理其本地版本历史（跟随主文档生命周期，不留孤儿分文档） */
+    if(localHistory()){ try{ await localHistory().removeAll(id); }catch(e){} }
     openTabs = openTabs.filter(t=>t!==id);
     dirtySet.delete(id);
     if(activeResumeId === id){
@@ -511,10 +572,12 @@ function toggleResumeItemMenu(id, btn){
   const meta = (global.ResumeLibrary && typeof global.ResumeLibrary.getMeta === 'function') ? global.ResumeLibrary.getMeta(id) : null;
   const S = shareApi();
   const locked = !!(S && S.isLocked(meta));
+  const master = !!(meta && meta.isMaster);
   const pub = !!(S && S.isPublic(meta));
   const hasToken = !!(S && S.tokenOf(meta));
   el.innerHTML = '<button type="button" role="menuitem" onclick="'+call('resumeRename')+'">重命名</button>'
     + '<button type="button" role="menuitem" onclick="'+call('resumeDuplicate')+'">复制</button>'
+    + '<button type="button" role="menuitem" title="把这份标为「主简历」（源头简历），库里唯一、排在列表第一" onclick="'+call('resumeSetMaster')+'">'+(master?'取消主简历':'设为主简历')+'</button>'
     + '<span class="menu-sep"></span>'
     + '<button type="button" role="menuitem" title="锁定后编辑区只读，避免误改已定稿的版本" onclick="'+call('resumeToggleLock')+'">'+(locked?'解锁编辑':'锁定防误改')+'</button>'
     + '<button type="button" role="menuitem" title="只有开启分享的简历才允许导出只读分享页" onclick="'+call('resumeTogglePublic')+'">'+(pub?'关闭分享':'开启分享')+'</button>'
@@ -551,13 +614,16 @@ function renderResumeDrawer(){
          ⚠️「⋯」按钮的 keydown 必须 stopPropagation：焦点在它上面按回车时，
          事件会冒泡到外层卡片，否则会顺带打开这份简历。 */
       const derived = m.kind === 'derived';
+      const master = !!m.isMaster;
       const S3 = shareApi();
       const locked = !!(S3 && S3.isLocked(m));
       const pub = !!(S3 && S3.isPublic(m));
-      return '<div class="resume-item'+(active?' active':'')+(locked?' is-locked':'')+'" role="button" tabindex="0" data-id="'+esc(m.id)+'" onclick="ResumeEditor.openResume(\''+esc(m.id)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ResumeEditor.openResume(\''+esc(m.id)+'\')}">'
+      return '<div class="resume-item'+(active?' active':'')+(locked?' is-locked':'')+(master?' is-master':'')+'" role="button" tabindex="0" data-id="'+esc(m.id)+'" onclick="ResumeEditor.openResume(\''+esc(m.id)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();ResumeEditor.openResume(\''+esc(m.id)+'\')}">'
+        /* ⚠️ 主角标不能放进 .drawer-thumb —— renderDrawerThumbs() 会覆盖 thumb 的 innerHTML，放里面会被抹掉 */
+        + (master?'<span class="drawer-master-badge" title="主简历 · 源头简历">主</span>':'')
         + '<div class="drawer-thumb resume-thumb" data-thumb-id="'+esc(m.id)+'"></div>'
         + '<div class="resume-item-main">'
-        +   '<span class="resume-item-title">'+(dirty?'● ':'')+(locked?'<em class="resume-item-lock" aria-label="已锁定">🔒</em> ':'')+esc(m.title)+(derived?' <em class="resume-item-kind">定制版</em>':'')+(pub?' <em class="resume-item-kind is-public">分享中</em>':'')+'</span>'
+        +   '<span class="resume-item-title">'+(dirty?'● ':'')+(locked?'<em class="resume-item-lock" aria-label="已锁定">🔒</em> ':'')+(master?'<em class="resume-item-kind is-master">主</em> ':'')+esc(m.title)+(derived?' <em class="resume-item-kind">定制版</em>':'')+(pub?' <em class="resume-item-kind is-public">分享中</em>':'')+'</span>'
         +   '<span class="resume-item-meta">'+esc(m.source==='local'?'本地':'云端')+' · '+esc(t)+'</span>'
         + '</div>'
         + '<button type="button" class="resume-item-more" data-more="'+esc(m.id)+'" title="更多操作（重命名 / 复制 / 锁定 / 分享 / 删除）" aria-haspopup="menu"'
@@ -728,7 +794,7 @@ function seedPayload(){
 function clearSaved(){
   if(!confirm('确定清空当前简历的修改，恢复到内置初始数据吗？')) return;
   try{ localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY_LEGACY); }catch(e){}
-  recordHistory('action');
+  recordHistory('action', '重置');
   const seed = seedPayload();
   if(_libraryReady && activeResumeId && typeof global.ResumeLibrary === 'object' && global.ResumeLibrary){
     try{ global.ResumeLibrary.save(activeResumeId, seed, {}); }catch(e){}
@@ -850,7 +916,7 @@ function applyImported(obj){
     return;
   }
   if(!confirm('导入将用文件内容覆盖当前编辑器中的全部内容，确定继续？')) return;
-  recordHistory('action');   // 导入前记录，导入结果可撤销
+  recordHistory('action', '导入');   // 导入前记录，导入结果可撤销
   applyDataPayload(obj);
   alert('✓ 已导入数据');
 }
@@ -941,11 +1007,19 @@ RB.getLibraryReady = function(){ return _libraryReady; };
 RB.setActiveResumeId = function(v){ activeResumeId = v; };
 RB.setOpenTabs = function(v){ openTabs = v; };
 RB.computePageBreaks = computePageBreaks;
+/* 导出侧（export-pdf.js）的「内容区 px→mm」换算必须与分页计算同源，否则两条导出路径
+   会各算一套版面几何（历史 bug：图片版纵向拉伸 4.5% 且每页少装 11mm） */
+RB.getPageMetrics = getPageMetrics;
 RB.beginPaperGuard = beginPaperGuard;
 RB.endPaperGuard = endPaperGuard;
 RB.getFileName = getFileName;
 RB.saveState = saveState;
 RB.drawPageGuides = drawPageGuides;
+/* N11 本地版本历史（供 history-view.js 读列 / 回滚 / 手动快照） */
+RB.listLocalVersions = listLocalVersions;
+RB.restoreLocalVersion = restoreLocalVersion;
+RB.saveManualSnapshot = saveManualSnapshot;
+RB.appendLocalVersion = appendLocalVersion;
 
 /* ============ 初始化 ============ */
 /* 主题：js/theme.js 加载时已自行初始化并写好 <html> 属性；
@@ -1128,6 +1202,17 @@ async function resumeToggleLock(id){
     await global.ResumeLibrary.patchMeta(id, { isLocked: next });
     renderResumeDrawer();
     if(id === activeResumeId) applyLockState();
+  }catch(e){ alert('操作失败：' + (e && e.message ? e.message : e)); }
+}
+
+/* 主简历：设 / 取消（互斥，库里唯一）。抽屉卡片「⋯」菜单触发。 */
+async function resumeSetMaster(id){
+  if(!_libraryReady || !id) return;
+  const L = global.ResumeLibrary;
+  if(!L){ alert('简历库模块未加载'); return; }
+  try{
+    await L.setMaster(id);
+    renderResumeDrawer();
   }catch(e){ alert('操作失败：' + (e && e.message ? e.message : e)); }
 }
 
@@ -1389,7 +1474,7 @@ async function removeAllResumes(){
   try{
     cancelPendingSave();
     global.ResumeLibrary.beginRemoveBatch();
-    for(let i=0;i<idx.length;i++) await global.ResumeLibrary.remove(idx[i].id);
+    for(let i=0;i<idx.length;i++){ await global.ResumeLibrary.remove(idx[i].id); if(localHistory()){ try{ await localHistory().removeAll(idx[i].id); }catch(e){} } }
     activeResumeId = null; openTabs = []; dirtySet.clear();
     renderResumeTabs(); renderResumeDrawer(); syncLockState();
     if(global.ResumeRouter) global.ResumeRouter.navigate('/library');
@@ -1698,6 +1783,7 @@ global.ResumeEditor = {
   resumeRemove: resumeRemove,
   resumeRename: resumeRename,
   resumeSetTags: resumeSetTags,
+  resumeSetMaster: resumeSetMaster,
   resumeCloseTab: resumeCloseTab,
   /* —— N3 分享与权限控制 —— */
   resumeToggleLock: resumeToggleLock,
@@ -1744,6 +1830,10 @@ global.ResumeEditor = {
   migratePageBreaks: migratePageBreaks,
   getFileName: getFileName,
   SAVE_KEY: SAVE_KEY,
-  SAVE_KEY_LEGACY: SAVE_KEY_LEGACY
+  SAVE_KEY_LEGACY: SAVE_KEY_LEGACY,
+  // —— N11 本地版本历史（供测试 / 外部调用）——
+  listLocalVersions: listLocalVersions,
+  restoreLocalVersion: restoreLocalVersion,
+  saveManualSnapshot: saveManualSnapshot
 };
 }) (typeof window !== 'undefined' ? window : globalThis);

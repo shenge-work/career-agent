@@ -338,6 +338,82 @@ module.exports = [
       });
     }
   },
+  /* ---------- 主简历（源头简历唯一标识，2026-09-22）----------
+     isMaster 经 meta 白名单透传、setMaster 互斥、list 主在前、init 自动播种源头简历。
+     ⚠️ 与文件内其它用例共享 ctx.ResumeLibrary 索引会相互污染（先造的简历会留下、且可能已设主），
+        故这三例各自重新 require 一份全新 ResumeLibrary（独立内存后端 + 空索引）做隔离。 */
+  {
+    name: '主简历：setMaster 互斥，库里唯一',
+    fn: (ctx) => {
+      delete require.cache[require.resolve('../js/store/resume-library.js')];
+      const L = require('../js/store/resume-library.js').ResumeLibrary;
+      let a = null, b = null;
+      return L.create({ title: 'A', payload: { data: { name: 'a' } } })
+        .then((m) => { a = m.id; return L.create({ title: 'B', payload: { data: { name: 'b' } } }); })
+        .then((m) => {
+          b = m.id;
+          return L.setMaster(a);
+        }).then((set) => {
+          ctx.assert(set === true, '首次设为唯一主返回 true');
+          ctx.assert(L.getMeta(a).isMaster === true, 'A 标记为主');
+          ctx.assert(!L.getMeta(b).isMaster, 'B 非主');
+          return L.setMaster(b);
+        }).then((set) => {
+          ctx.assert(set === true, '改设 B 为主返回 true');
+          ctx.assert(L.getMeta(b).isMaster === true, 'B 标记为主');
+          ctx.assert(!L.getMeta(a).isMaster, '⚠️ 互斥：A 被取消');
+          return L.setMaster(b);
+        }).then((set) => {
+          ctx.assert(set === false, '对已为主者再 setMaster → 取消，返回 false');
+          ctx.assert(!L.getMeta(b).isMaster, '取消后 B 非主');
+          ctx.assert(!L.getMeta(a).isMaster, '取消后 A 仍非主（库里暂时无主）');
+          return L.list();
+        }).then((idx) => {
+          ctx.assert(idx.every((m) => !m.isMaster), '取消后列表里无主');
+        });
+    }
+  },
+  {
+    name: '主简历：list 把主简历排在第一',
+    fn: (ctx) => {
+      delete require.cache[require.resolve('../js/store/resume-library.js')];
+      const L = require('../js/store/resume-library.js').ResumeLibrary;
+      let a = null, b = null, c = null;
+      return L.create({ title: 'A', payload: { data: { name: 'a' } } })
+        .then((m) => { a = m.id; return L.create({ title: 'B', payload: { data: { name: 'b' } } }); })
+        .then((m) => { b = m.id; return L.create({ title: 'C', payload: { data: { name: 'c' } } }); })
+        .then((m) => { c = m.id; return L.setMaster(c); })
+        .then(() => L.list())
+        .then((idx) => {
+          ctx.assert(idx.length === 3, '全新实例共 3 份');
+          ctx.assert(idx[0].id === c, '主简历 C 排第一');
+          ctx.assert(idx.findIndex((m) => m.id === c) < idx.findIndex((m) => m.id === a), 'C 在 A 之前');
+          ctx.assert(idx.findIndex((m) => m.id === c) < idx.findIndex((m) => m.id === b), 'C 在 B 之前');
+        });
+    }
+  },
+  {
+    name: '主简历：init 自动播种——无主时把源头简历（有派生子的母简历）标为主',
+    fn: (ctx) => {
+      delete require.cache[require.resolve('../js/store/resume-library.js')];
+      const L = require('../js/store/resume-library.js').ResumeLibrary;
+      return L.create({ title: '母', payload: { data: { name: 'm' } } })
+        .then((master) => {
+          return L.derive({ parentId: master.id, title: '母 · 定制' })
+            .then(() => L.init())
+            .then((r) => {
+              ctx.assert(r.count === 2, '全新实例共 2 份');
+              const masterMeta = L.getMeta(master.id);
+              ctx.assert(masterMeta.isMaster === true, '有派生子的母简历被自动标为主');
+              const kids = L._stores._index().filter((m) => m.parentId === master.id);
+              ctx.assert(kids.every((k) => !k.isMaster), '派生子均非主');
+              return L.list();
+            }).then((idx) => {
+              ctx.assert(idx[0].id === master.id, '源头条排在第一');
+            });
+        });
+    }
+  },
   {
     name: 'N3：beginRemoveBatch 清空上一批，整批删除可一次全部找回',
     fn: (ctx) => {

@@ -212,6 +212,29 @@ for (const c of libCases) {
     .catch((e) => { fileResults.push({ name: 'library › ' + c.name + '（抛错: ' + (e && e.message ? e.message : e) + '）', pass: false }); });
 }
 
+/* ---------- N11 本地版本历史：加载 local-history.js 到 vm ctx（复用已加载的 ResumeLibrary 内存后端） ----------
+   纯函数（applyRetention / genVersionId / estimateBytes）由 cases 内部 require 模块导出直接测；
+   完整链路（append→list→restore→隔离→removeAll）走 vm ctx 里的 ResumeLocalHistory。 */
+try {
+  const lhCode = fs.readFileSync(path.join(ROOT, 'js', 'store', 'local-history.js'), 'utf8');
+  vm.runInContext(lhCode, ctx, { filename: 'local-history.js' });
+} catch (e) {
+  fileResults.push({ name: '加载期异常（js/store/local-history.js）: ' + (e && e.message ? e.message : e), pass: false });
+}
+
+const lhCases = require(path.join(ROOT, 'test', 'cases-local-history.js'));
+const lhCtx = {
+  ResumeLocalHistory: ctx.ResumeLocalHistory,
+  ResumeLibrary: ctx.ResumeLibrary,
+  ResumeEditor: ctx.ResumeEditor,
+  assert(cond, msg) { fileResults.push({ name: 'local-history › ' + msg, pass: !!cond }); },
+};
+let lhChain = Promise.resolve();
+for (const c of lhCases) {
+  lhChain = lhChain.then(() => c.fn(lhCtx))
+    .catch((e) => { fileResults.push({ name: 'local-history › ' + c.name + '（抛错: ' + (e && e.message ? e.message : e) + '）', pass: false }); });
+}
+
 /* ---------- 第四步：js/store/datasource.js 的注册表用例（M4）----------
    在 vm 上下文加载（和浏览器同路径），每个用例前 _reset 保证隔离。 */
 try {
@@ -401,8 +424,38 @@ for (const c of exportCases) {
 /* ---------- 文件级冒烟断言（打印样式 / 入口接线，不依赖浏览器）---------- */
 F('打印样式存在 @media print', /@media\s+print/.test(cssCode));
 F('打印时隐藏编辑区与侧边面板', /@media\s+print[\s\S]*?\.side-rail,\.side-panel[^;]*display\s*:\s*none/.test(cssCode));
-F('打印条目分页保护 break-inside:avoid', /break-inside\s*:\s*avoid/.test(cssCode));
+/* 2026-09-22 改：打印侧不再用块级「整体不许断开」（break-inside:avoid / break-after:avoid）——
+   图片版 PDF 是按「等分 + 切口吸附行间空白」切片的，表达不了块级避让，
+   一旦打印侧开了它，Chrome 会把整块推到下一页，页数比图片版多一页（实测 4 vs 3）。
+   现在的契约：打印侧把分页规则压平成「每页尽量填满、断点只落在行框顶端」，
+   只保留数据里的强制换页。 */
+F('打印侧不再使用块级 break-inside:avoid（两条导出路径分页必须一致）',
+  !/break-inside\s*:\s*avoid/.test(cssCode));
+F('打印侧把 break-inside / orphans / widows 压平为「尽量填满」',
+  /\.resume\s*\*\{[^}]*break-inside\s*:\s*auto[^}]*orphans\s*:\s*1[^}]*widows\s*:\s*1/.test(cssCode));
+F('打印侧保留数据里的强制换页 break-before:page', /\.page-break-before\{[^}]*break-before\s*:\s*page/.test(cssCode));
 F('打印纸张为 A4', /@page\{[^}]*size\s*:\s*A4/.test(cssCode));
+/* —— 两条导出路径的版面几何必须同源（2026-09-22 修）——
+   历史 bug：分页/预览用 contentW*297/210 当内容区高度（比真实值少 11mm/页），
+   图片版 PDF 因此每页少装一行半内容、且把内容纵向拉伸 4.5%，与矢量版对不上。 */
+F('分页几何用真实 A4 内容区高度（297 - 上下边距）',
+  /contentHmm\s*=\s*Math\.max\(1,\s*297\s*-\s*safeMm\(m\.top/.test(renderCode));
+/* 负向断言只认「赋值语句」形态，避免命中讲解历史 bug 的注释文本 */
+F('分页几何已弃用 contentW * 297/210 的错算式',
+  !/(const|let|var)\s+\w+\s*=\s*[^;\n]*\*\s*297\s*\/\s*210/.test(renderCode));
+F('导出侧按 getPageMetrics 同源换算 px→mm',
+  /RB\.getPageMetrics\(cap\.clone\)/.test(exportPdfCode)
+  && /const pageHpx\s*=\s*metrics\s*\?\s*metrics\.pageH/.test(exportPdfCode)
+  && !/(const|let|var)\s+pageHpx\s*=\s*contentWpx\s*\*\s*297\s*\/\s*210/.test(exportPdfCode));
+F('app.js 桥出 RB.getPageMetrics', /RB\.getPageMetrics\s*=\s*getPageMetrics/.test(appCode));
+/* —— ↑↓ 排序按钮必须完全不参与布局流 ——
+   历史 bug：它是 inline-flex 实体盒子，在 .job/.project 里各撑出一整行空白（本简历 8 处 = 153px），
+   而 @media print 又把它 display:none —— 于是「预览 / 图片版」比「矢量版」高出 153px，分页必然错位。 */
+F('↑↓ 按钮绝对定位（不占布局高度）', /\.resume \.reorder-btns\{position:absolute/.test(cssCode));
+F('↑↓ 按钮锚定块已设 position:relative',
+  /\.resume \.job,\.resume \.project,\.resume \.section-title,\.resume \.skill-group,\.resume \.adv-li\{position:relative;\}/.test(cssCode));
+F('↑↓ 按钮不再用 margin-left:auto 留在标题行里', !/\.section-title \.reorder-btns\{margin-left:auto\}/.test(cssCode));
+F('打印时仍显式隐藏 ↑↓ 按钮', /@media print\{ \.resume \.reorder-btns\{display:none !important;\} \}/.test(cssCode));
 /* 入口类断言统一问「清单渲染出了什么」，不再问 index.html 里写了什么 */
 F('工具菜单面板含 PDF 预览按钮', /ResumeEditor\.exportPDF\(\)/.test(menuDesktop));
 F('工具菜单面板含导出图片版按钮', /ResumeEditor\.exportLongImage\(\)/.test(menuDesktop));
@@ -578,7 +631,11 @@ F('app.js 暴露 pullFromFeishu / startAutoSync 并在启动后调用',
 F('历史版本页按激活简历 id 拉版本、恢复中按钮置灰',
   /listVersions\(resumeId\)/.test(historyViewCode) && /恢复中/.test(historyViewCode));
 F('历史版本页含加载 spinner',
-  /<span class="spinner"><\/span>/.test(historyViewCode) && /正在拉取飞书版本/.test(historyViewCode));
+  /<span class="spinner"><\/span>/.test(historyViewCode) && /正在加载版本历史/.test(historyViewCode));
+/* N11：锁定简历只读——恢复本地版本必须先过 isActiveLocked 守卫（浏览历史/手动快照不受限）。
+   ⚠️ 窗口限定 400 字符：[\s\S]*? 会跨出函数体匹配到后面 isActiveLocked 的定义处（变异验证踩过）。 */
+F('N11 restoreLocalVersion 带锁定守卫（N3 互补：锁定态拒绝覆盖正文）',
+  /async function restoreLocalVersion\(versionId\)\{[\s\S]{0,400}isActiveLocked\(\)/.test(appCode));
 F('serve.js 恢复接口透传 resumeId（getVersion(versionId, body.resumeId)）',
   /getVersion\(versionId, body\.resumeId \|\| 'default'\)/.test(serveCode));
 F('serve.js 静态服务屏蔽敏感文件（sync.config/oauth/state）',
@@ -859,7 +916,7 @@ for (const c of pfCases) {
 }
 
 /* ---------- 报告（等异步的 library 用例跑完再输出） ---------- */
-libChain.then(() => ssChain).then(() => jdChain).then(() => nativeExportChain).then(() => menuChain).then(() => undoChain).then(() => reorderChain).then(() => perfChain).then(() => saveDebounceChain).then(() => themeChain).then(() => shareChain).then(() => pfChain).then(() => httpChain).then(() => {
+libChain.then(() => lhChain).then(() => ssChain).then(() => jdChain).then(() => nativeExportChain).then(() => menuChain).then(() => undoChain).then(() => reorderChain).then(() => perfChain).then(() => saveDebounceChain).then(() => themeChain).then(() => shareChain).then(() => pfChain).then(() => httpChain).then(() => {
   const all = ctx.__results.concat(fileResults);
   let pass = 0, fail = 0;
   for (const r of all) {
