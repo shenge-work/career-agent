@@ -12,6 +12,14 @@ export interface SecurityCheckResult {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
+/**
+ * 允许「跨站抵达」的路径前缀：飞书 OAuth 回调是浏览器从 accounts.feishu.cn
+ * 302 跳转过来的（Sec-Fetch-Site: cross-site、无 Origin），会撞上第 3 条规则。
+ * 这些路径仍然校验 Host 回环（防 DNS rebinding），只是放行跨站 GET。
+ * 路径本身无副作用（只把授权码换成凭证），且必须携带 start 时签发的 state。
+ */
+export const CROSS_SITE_ALLOWED_PREFIXES = ['/api/feishu/oauth/callback'];
+
 function isLoopbackHost(host: string): boolean {
   const h = host.toLowerCase().trim();
   if (!h) return false;
@@ -34,10 +42,16 @@ function isLoopbackOrigin(origin: string): boolean {
 
 export function assertLocalRequest(
   headers: Record<string, unknown>,
-  method = 'GET'
+  method = 'GET',
+  url = ''
 ): SecurityCheckResult {
   const host = String(headers.host || '');
   if (!isLoopbackHost(host)) return { ok: false, reason: 'Forbidden: invalid Host' };
+
+  // 跨站抵达的外部回调（Host 仍须回环）：飞书 OAuth 回调页
+  const isCrossSiteAllowed =
+    method === 'GET' && CROSS_SITE_ALLOWED_PREFIXES.some((p) => url === p || url.startsWith(p + '?'));
+  if (isCrossSiteAllowed) return { ok: true };
 
   const origin = headers.origin ? String(headers.origin) : '';
   if (origin && !isLoopbackOrigin(origin)) {

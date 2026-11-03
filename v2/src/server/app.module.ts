@@ -6,6 +6,7 @@ import { CollectModule } from './collect/collect.module';
 import { DbModule } from './db/db.module';
 import { RenderModule } from './render/render.module';
 import { ResumesModule } from './resumes/resumes.module';
+import { SyncModule } from './sync/sync.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { UsersModule } from './users/users.module';
     RenderModule,
     AiModule,
     CollectModule,
+    SyncModule,
   ],
 })
 export class AppModule {}

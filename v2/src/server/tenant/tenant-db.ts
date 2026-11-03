@@ -2,7 +2,19 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DB_TOKEN } from '../../shared/constants';
 import type { Database } from '../db/client';
-import { aiConfigs, aiUsage, companies, companyJds, resumes, settings, tracker, versions } from '../db/schema';
+import {
+  aiConfigs,
+  aiUsage,
+  companies,
+  companyJds,
+  resumes,
+  settings,
+  syncConfigs,
+  syncOauth,
+  syncState,
+  tracker,
+  versions,
+} from '../db/schema';
 
 export interface ResumeInput {
   id: string;
@@ -294,6 +306,91 @@ export class TenantDb {
           })
           .returning();
       },
+
+      // -------------------------------------------------- 飞书同步（P2b 二期）
+      // 凭证 / 状态全部按账号隔离；appSecret / accessToken 只在本层可见，绝不回传。
+
+      getSyncConfig: () =>
+        db.select().from(syncConfigs).where(eq(syncConfigs.userId, userId)).limit(1),
+
+      /** upsert 应用身份配置；patch 为已归一化的全量列值。 */
+      upsertSyncConfig: (patch: {
+        appId: string;
+        appSecret: string;
+        domain: string;
+        folderToken: string;
+        docTitle: string;
+        fileName: string;
+        fileUploadMode: string;
+        dryRun: boolean;
+      }) =>
+        db
+          .insert(syncConfigs)
+          .values({ userId, ...patch })
+          .onConflictDoUpdate({
+            target: syncConfigs.userId,
+            set: { ...patch, updatedAt: new Date() },
+          })
+          .returning(),
+
+      /** 只更新个别列（probe 回填 folder_token / 默认项时用），不改 appSecret。 */
+      patchSyncConfig: (patch: Partial<{
+        appId: string;
+        domain: string;
+        folderToken: string;
+        docTitle: string;
+        fileName: string;
+        fileUploadMode: string;
+        dryRun: boolean;
+      }>) =>
+        db
+          .update(syncConfigs)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(eq(syncConfigs.userId, userId))
+          .returning(),
+
+      deleteSyncConfig: () =>
+        db.delete(syncConfigs).where(eq(syncConfigs.userId, userId)).returning({ userId: syncConfigs.userId }),
+
+      getSyncOauth: () =>
+        db.select().from(syncOauth).where(eq(syncOauth.userId, userId)).limit(1),
+
+      upsertSyncOauth: (patch: {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        refreshExpiresAt: number;
+        scope: string;
+      }) =>
+        db
+          .insert(syncOauth)
+          .values({ userId, ...patch, updatedAt: Date.now() })
+          .onConflictDoUpdate({
+            target: syncOauth.userId,
+            set: { ...patch, updatedAt: Date.now() },
+          })
+          .returning(),
+
+      deleteSyncOauth: () =>
+        db.delete(syncOauth).where(eq(syncOauth.userId, userId)).returning({ userId: syncOauth.userId }),
+
+      getSyncState: (resumeId: string) =>
+        db
+          .select()
+          .from(syncState)
+          .where(and(eq(syncState.userId, userId), eq(syncState.resumeId, resumeId)))
+          .limit(1),
+
+      /** upsert 简历的飞书锚点；app 与 user 身份各写各的列，互不串写。 */
+      upsertSyncState: (resumeId: string, patch: { documentId?: string; fileToken?: string; userDocumentId?: string; userFileToken?: string }) =>
+        db
+          .insert(syncState)
+          .values({ userId, resumeId, ...patch })
+          .onConflictDoUpdate({
+            target: [syncState.userId, syncState.resumeId],
+            set: { ...patch, updatedAt: new Date() },
+          })
+          .returning(),
     };
   }
 }

@@ -209,6 +209,57 @@ export const aiUsage = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] })]
 );
 
+/**
+ * P2b 第二期 · 飞书「应用身份」配置（按账号隔离）。
+ * app_secret 只留在服务端数据库，任何 GET 接口都不回传明文（只给 hasSecret）。
+ * 未配置时只读回退 v1 的 sync.config.json；一旦保存过本账号配置即以 DB 为准。
+ */
+export const syncConfigs = pgTable('sync_configs', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  appId: text('app_id').notNull().default(''),
+  appSecret: text('app_secret').notNull().default(''),
+  domain: text('domain').notNull().default(''),
+  folderToken: text('folder_token').notNull().default(''),
+  docTitle: text('doc_title').notNull().default(''),
+  fileName: text('file_name').notNull().default(''),
+  fileUploadMode: text('file_upload_mode').notNull().default('versioned'),
+  dryRun: boolean('dry_run').notNull().default(false),
+  updatedAt: updatedAt(),
+});
+
+/** 扫码授权（OAuth 授权码模式）的用户身份凭证；有效期沿用 v1 的毫秒时间戳语义。 */
+export const syncOauth = pgTable('sync_oauth', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token').notNull().default(''),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+  refreshExpiresAt: bigint('refresh_expires_at', { mode: 'number' }).notNull().default(0),
+  scope: text('scope').notNull().default(''),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  createdAt: createdAt(),
+});
+
+/** 每份简历 × 认证模式的飞书锚点（docx 文档 / 云盘文件 token），分列即 v1 的分键隔离。 */
+export const syncState = pgTable(
+  'sync_state',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    resumeId: text('resume_id').notNull(),
+    documentId: text('document_id').notNull().default(''),
+    fileToken: text('file_token').notNull().default(''),
+    userDocumentId: text('user_document_id').notNull().default(''),
+    userFileToken: text('user_file_token').notNull().default(''),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.resumeId] })]
+);
+
 export const schema = {
   users,
   sessions,
@@ -221,6 +272,9 @@ export const schema = {
   settings,
   aiConfigs,
   aiUsage,
+  syncConfigs,
+  syncOauth,
+  syncState,
 };
 
 export type UserRow = typeof users.$inferSelect;
