@@ -174,7 +174,8 @@ resume-builder/
 │   ├── clean-html-injections.js # 剥离外部编辑器注入的 data-page-node-id
 │   ├── migrate-legacy.js    # 旧版单文件简历 HTML → 可导入 JSON（输出到 dist/）
 │   ├── save-data.js        # 把浏览器导出的 JSON 落盘为 data/resume.json（备用回写方式）
-│   └── render-resume.js     # JSON → 独立 A4 简历 HTML（用项目真实渲染管线，输出到 dist/）
+│   ├── render-resume.js     # JSON → 独立 A4 简历 HTML（用项目真实渲染管线，输出到 dist/）
+│   └── export-company-research.js # 公司情报 → 可入库 Markdown 快照（脱敏 / --check / --private）
 ├── test/                    # 纯 Node、零依赖测试
 │   ├── run.js               #   运行器（DOM/浏览器桩，vm 加载 data + store + app + audit + export-extra）
 │   ├── cases.js             #   核心逻辑用例
@@ -345,6 +346,7 @@ CI（`.github/workflows/ci.yml`）在每次 push / PR 自动运行前两项与�
 - 发版流程（维护者）：见 [docs/构建与发版/发版说明.md](./docs/构建与发版/发版说明.md)。
 - 后续优化方向：见 [ROADMAP.md](./ROADMAP.md)。
 - 跨平台改造的**逐任务验收标准与验收记录**：见 [docs/验收与记录/跨平台改造-验收标准与验收记录.md](./docs/验收与记录/跨平台改造-验收标准与验收记录.md)。
+- **v2 本地服务器化重构（账号 / 数据库 / 渲染孤岛 / PDF / AI / 采集）的完整归档**：见 [docs/v2重构归档/README.md](./docs/v2重构归档/README.md)。该目录记录选型决策、架构与接口、逐阶段验收、运维与后续路线；新代码在 `v2/`，本 README 描述的是仍独立运行的 v1 形态。
 
 > ⏸ **关于「AI 辅助写简历」**：仓库内 [docs/AI能力/AI辅助写简历-技术设计方案.md](./docs/AI能力/AI辅助写简历-技术设计方案.md) 存有一份完整的技术设计方案
 > （选型调研、功能设计、UI 设计、目录结构），但**那只是未来演进方向，当前尚未实施** ——
@@ -368,4 +370,5 @@ CI（`.github/workflows/ci.yml`）在每次 push / PR 自动运行前两项与�
 - **真实简历内容**存放在 `data/resumes/`（web 模式）或系统用户数据目录（桌面安装包），已被 `.gitignore` **整体忽略**，不会进入公开仓库。
 - 飞书应用凭证存放在 `sync.config.json`（gitignored），由本地服务 / 原生层读取，**绝不下发到浏览器**；桌面与安卓版中它只存在于 Rust 进程内存与系统文件。
 - 安装包构建时只把 `index.html` / `css` / `js` / `vendor` / `template.json` 复制进 `dist-desktop/`，**不含 `data/`**；可用 `strings <二进制> | grep <姓名>` 复核。
+- **公司调研资料**：事实源 `data/companies/companies.json` 与 `data/tracker/seed.json` 随 `data/` 整体不入库；可入库的脱敏快照与调研结论沉淀在 [`docs/公司调研/`](./docs/公司调研/README.md)，由 `npm run research:export` 生成、`npm run research:check` 校验新鲜度。`--private` 完整版含未脱敏姓名，仅落在 `data/`，勿对外分享。
 - 提交前建议自查：`npm run clean:html` 后再 `git add`，并用 `git grep` 扫描真实姓名 / 公司名等 PII。
