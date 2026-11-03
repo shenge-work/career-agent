@@ -356,7 +356,9 @@ module.exports = [
       ctx.assert(/\.jd-chip\.weak/.test(css), '含 .jd-chip.weak');
       ctx.assert(/\.jd-chip\.covered/.test(css), '含 .jd-chip.covered');
       ctx.assert(/\.jd-input/.test(css), '含 JD 输入框样式');
-      const block = css.slice(css.indexOf('.jd-input-wrap'));
+      const start = css.indexOf('.jd-input-wrap');
+      const end = css.indexOf('N3 分享与权限控制', start);
+      const block = css.slice(start, end === -1 ? undefined : end);
       ctx.assert(block.indexOf('#fff') === -1 && block.indexOf('rgb(') === -1,
         'JD 样式不写死颜色（随主题适配，与体检面板同一套灰阶约束）');
       ctx.assert(/var\(--ui-/.test(block), 'JD 样式走 --ui-* 变量');

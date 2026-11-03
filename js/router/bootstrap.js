@@ -18,9 +18,12 @@
     global.ResumeRouter.register('/settings', global.SettingsView);
     global.ResumeRouter.register('/history', global.HistoryView);
     global.ResumeRouter.register('/tracker', global.TrackerView);
+    global.ResumeRouter.register('/tracker/:id', global.TrackerView);
     global.ResumeRouter.register('/templates', global.TemplatesView);
     global.ResumeRouter.register('/portfolio', global.PortfolioView);
     global.ResumeRouter.register('/portfolio/:id', global.PortfolioView);
+    global.ResumeRouter.register('/companies', global.CompanyView);
+    global.ResumeRouter.register('/companies/:id', global.CompanyView);
 
     /* BUG-05 修复：为根路径注册显式默认路由，消除「no route matched: /」警告。
        重定向到工作台默认视图 /editor（与 app.js 初始渲染保持一致，零观感变化）。 */

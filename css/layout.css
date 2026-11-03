@@ -76,6 +76,7 @@
 .view-root { display: none; margin-left: 64px; min-height: 100vh; }
 
 /* body.route-library：隐藏编辑器、显示 view-root */
+body.route-companies,
 body.route-library,
 body.route-settings,
 body.route-history,
@@ -90,12 +91,14 @@ body.route-portfolio {
   overflow-y: auto;
   overflow-x: hidden;
 }
+body.route-companies .app,
 body.route-library .app,
 body.route-settings .app,
 body.route-history .app,
 body.route-tracker .app,
 body.route-templates .app,
 body.route-portfolio .app { display: none !important; }
+body.route-companies .view-root,
 body.route-library .view-root,
 body.route-settings .view-root,
 body.route-history .view-root,
@@ -819,6 +822,110 @@ body.route-editor .view-root { display: none; margin-left: 64px; min-height: 100
 .tk-link:hover { color: var(--ui-link-hover, #1d4ed8); }
 .tk-hint { font-size: 11.5px; color: var(--ui-muted); margin-top: -2px; }
 
+/* ===== 投递管理（重构版）：平台标签 / 灰度状态 / 详情页 / 聊天记录 ===== */
+.tk-co-cell { font-weight: 600; color: var(--ui-text); }
+.tk-platform {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--ui-text);
+  background: var(--ui-panel-head);
+  white-space: nowrap;
+}
+.tk-status { font-size: 12.5px; font-weight: 600; }
+.tk-tone-a { color: var(--ui-muted); }
+.tk-tone-b { color: var(--ui-text); }
+.tk-tone-strong { color: var(--ui-text); font-weight: 700; }
+.tk-tone-c { color: var(--ui-muted); text-decoration: line-through; text-decoration-color: var(--ui-border); }
+.tk-table tbody tr[data-id] { cursor: pointer; }
+
+/* 投递详情页 */
+.tk-detail { max-width: 880px; margin: 0 auto; }
+.tk-detail-card {
+  border: 1px solid var(--ui-border-soft);
+  border-radius: 10px;
+  padding: 4px 16px;
+  margin: 10px 0 20px;
+  background: var(--ui-card);
+}
+.tk-detail-row {
+  display: flex; gap: 14px; padding: 9px 0;
+  border-bottom: 1px dashed var(--ui-border-soft); font-size: 13.5px;
+}
+.tk-detail-row:last-child { border-bottom: none; }
+.tk-detail-k { width: 84px; flex: 0 0 84px; color: var(--ui-muted); }
+.tk-detail-v { color: var(--ui-text); flex: 1; }
+
+/* 投递详情内嵌的公司背景 */
+.tk-company-brief { margin: 6px 0 26px; padding-top: 6px; border-top: 2px solid var(--ui-border); }
+.tk-company-brief > .settings-header { display: none; }
+.tk-notebox {
+  margin: 8px 0 20px; padding: 12px 14px; border: 1px dashed var(--ui-border);
+  border-radius: 8px; font-size: 13px; color: var(--ui-muted);
+}
+
+/* 聊天记录 */
+.tk-chat-block { margin: 8px 0 30px; padding-top: 8px; border-top: 2px solid var(--ui-border); }
+.tk-chat-head { display: flex; align-items: center; gap: 12px; }
+.tk-chat-head .co-sec-title { flex: 1; }
+.tk-chat-list { display: flex; flex-direction: column; gap: 10px; padding: 10px 0 14px; }
+.tk-msg { display: flex; align-items: flex-end; gap: 6px; }
+.tk-msg.hr { justify-content: flex-start; }
+.tk-msg.me { justify-content: flex-end; }
+.tk-msg.sys { justify-content: center; }
+.tk-msg.sys > span {
+  font-size: 11.5px; color: var(--ui-muted);
+  background: var(--ui-panel-head); border-radius: 10px; padding: 2px 10px;
+}
+.tk-msg-bubble {
+  max-width: 72%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-card);
+}
+.tk-msg.me .tk-msg-bubble { background: var(--ui-panel-head); }
+.tk-msg-name { display: block; font-size: 11.5px; color: var(--ui-muted); margin-bottom: 2px; }
+.tk-msg-text { font-size: 13.5px; color: var(--ui-text); white-space: pre-wrap; word-break: break-word; }
+.tk-msg-time { display: block; font-size: 11px; color: var(--ui-muted); margin-top: 3px; text-align: right; }
+.tk-msg-del {
+  opacity: 0; border: none; background: transparent; color: var(--ui-muted);
+  cursor: pointer; font-size: 12px; align-self: center; transition: opacity .15s;
+}
+.tk-msg:hover .tk-msg-del { opacity: 1; }
+.tk-msg-del:hover { color: var(--ui-danger); }
+
+.tk-chat-form {
+  border: 1px solid var(--ui-border-soft);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--ui-card);
+}
+.tk-chat-form textarea {
+  width: 100%; box-sizing: border-box; margin: 8px 0;
+  padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 6px;
+  font: inherit; font-size: 13.5px; color: var(--ui-text); background: var(--ui-card);
+  resize: vertical;
+}
+.tk-chat-form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tk-chat-form-row select,
+.tk-chat-form-row input {
+  padding: 6px 10px; border: 1px solid var(--ui-border); border-radius: 6px;
+  font: inherit; font-size: 13px; color: var(--ui-text); background: var(--ui-card);
+}
+.tk-chat-form-row input[type="text"] { flex: 1; min-width: 150px; }
+
+.tk-collect-status {
+  margin-top: 10px; padding: 8px 12px; border-radius: 6px;
+  font-size: 12.5px; border: 1px solid var(--ui-border);
+  color: var(--ui-text); background: var(--ui-panel-head);
+  white-space: pre-wrap;
+}
+.tk-collect-status.ok { border-color: var(--ui-text); }
+.tk-collect-status.warn { color: var(--ui-muted); border-style: dashed; }
+
 /* 编辑 modal */
 .tk-modal {
   display: none;
@@ -887,6 +994,139 @@ body.route-editor .view-root { display: none; margin-left: 64px; min-height: 100
   border-top: 1px solid var(--ui-border-soft);
   display: flex;
   justify-content: flex-end;
+}
+
+/* ---------- 公司调研板块（company-view，复用 .tk-* 之上微调） ---------- */
+.co-modal-box { max-width: 580px; }
+.co-search {
+  padding: 6px 10px; border: 1px solid var(--ui-input-border, #d6d6d6); border-radius: 6px;
+  font-size: 13px; background: var(--ui-input-bg, #fff); color: var(--ui-text); min-width: 180px;
+}
+.co-degrade {
+  font-size: 11px; color: var(--ui-muted); border: 1px solid var(--ui-border-soft);
+  border-radius: 10px; padding: 2px 8px;
+}
+.co-name { font-weight: 600; color: var(--ui-text); }
+.co-rcount {
+  display: inline-block; min-width: 18px; text-align: center;
+  background: var(--ui-row); border-radius: 9px; padding: 1px 6px; font-size: 11px; color: var(--ui-text);
+}
+.co-flags { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ui-text); }
+.co-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.co-research-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; color: var(--ui-text); font-weight: 600; margin-top: 4px;
+}
+.co-research-list { display: flex; flex-direction: column; gap: 10px; }
+.co-research-item {
+  border: 1px solid var(--ui-border-soft); border-radius: 8px; padding: 8px;
+  display: flex; flex-direction: column; gap: 6px; background: var(--ui-bg);
+}
+.co-research-top { display: flex; gap: 6px; align-items: center; }
+.co-platform, .co-rdate {
+  padding: 6px 8px; border: 1px solid var(--ui-input-border, #d6d6d6); border-radius: 6px;
+  font-size: 13px; background: var(--ui-input-bg, #fff); color: var(--ui-text);
+}
+.co-platform { flex: 1; }
+.co-research-move { display: flex; gap: 4px; }
+.co-move {
+  border: 1px solid var(--ui-input-border, #d6d6d6); background: var(--ui-input-bg, #fff);
+  color: var(--ui-text); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;
+}
+.co-move.danger { color: var(--ui-danger); border-color: var(--ui-danger); }
+.co-rcontent, .co-rurl {
+  padding: 6px 8px; border: 1px solid var(--ui-input-border, #d6d6d6); border-radius: 6px;
+  font-size: 13px; font-family: inherit; background: var(--ui-input-bg, #fff); color: var(--ui-text);
+}
+.co-rcontent { resize: vertical; }
+
+/* 公司维度选择（录入弹层内，与来源平台并列） */
+.co-dim {
+  padding: 6px 8px; border: 1px solid var(--ui-input-border, #d6d6d6); border-radius: 6px;
+  font-size: 13px; background: var(--ui-input-bg, #fff); color: var(--ui-text);
+  flex: 0 0 92px; min-width: 0;
+}
+
+/* 公司详情页 */
+.co-detail { padding-bottom: 60px; }
+.co-detail-head { padding: 16px 32px 0; }
+.co-detail-name { font-size: 22px; }
+.co-detail-status { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 32px 0; }
+.co-detail-status .co-upd { font-size: 12px; color: var(--ui-muted); margin-left: auto; }
+.co-badge {
+  display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--ui-border-soft); color: var(--ui-muted); background: var(--ui-card);
+}
+.co-badge.on { border-color: var(--ui-text); color: var(--ui-text); font-weight: 600; }
+.co-detail-meta { display: flex; flex-wrap: wrap; gap: 14px 28px; padding: 16px 32px 0; }
+.co-meta-item { display: flex; flex-direction: column; gap: 4px; min-width: 110px; }
+.co-meta-k { font-size: 12px; color: var(--ui-muted); }
+.co-meta-v { font-size: 14px; color: var(--ui-text); word-break: break-all; }
+.co-sec { padding: 22px 32px 0; }
+.co-sec-title { font-size: 15px; font-weight: 700; color: var(--ui-text); margin: 0 0 10px; border-left: 3px solid var(--ui-border); padding-left: 8px; }
+.co-note { font-size: 14px; color: var(--ui-text); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.co-research-area { padding: 22px 32px 0; }
+.co-dim-hint { font-size: 12px; color: var(--ui-muted); margin: -4px 0 12px; }
+.co-rcards { display: flex; flex-direction: column; gap: 12px; }
+.co-rcard { background: var(--ui-card); border: 1px solid var(--ui-border); border-radius: 8px; padding: 12px 14px; }
+.co-rcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.co-rtag { display: inline-block; font-size: 12px; font-weight: 600; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 999px; padding: 2px 10px; }
+.co-rdate { font-size: 12px; color: var(--ui-muted); }
+.co-rcard-body { font-size: 14px; color: var(--ui-text); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.co-rcard-foot { margin-top: 8px; }
+.co-ext { color: var(--ui-text); text-decoration: underline; word-break: break-all; }
+.co-count { color: var(--ui-muted); font-weight: 400; font-size: 13px; }
+
+/* 投递岗位 JD：仿 BOSS 直聘信息架构（严格黑 / 白 / 灰，不用红橙） */
+.co-jd-area { padding: 22px 32px 0; }
+.co-jd-index { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.co-jd-pill {
+  border: 1px solid var(--ui-border); background: var(--ui-card); color: var(--ui-text);
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.co-jd-pill:hover { border-color: var(--ui-text); }
+.co-jd-cards { display: flex; flex-direction: column; gap: 16px; }
+.co-jd-card { background: var(--ui-card); border: 1px solid var(--ui-border); border-radius: 10px; padding: 18px 20px; }
+.co-jd-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.co-jd-title { font-size: 18px; font-weight: 700; color: var(--ui-text); }
+.co-jd-salary { font-size: 17px; font-weight: 700; color: var(--ui-text); white-space: nowrap; }
+.co-jd-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; font-size: 13px; color: var(--ui-muted); }
+.co-jd-meta .co-jd-sep { font-style: normal; color: var(--ui-border); margin: 0 2px; }
+.co-jd-rec { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ui-border-soft); }
+.co-jd-rec-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ui-border); color: var(--ui-card); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+.co-jd-rec-name { font-size: 14px; color: var(--ui-text); font-weight: 600; }
+.co-jd-rec-active { font-size: 12px; color: var(--ui-muted); margin-left: auto; }
+.co-jd-block { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--ui-border-soft); }
+.co-jd-block h3 { font-size: 14px; font-weight: 700; color: var(--ui-text); margin: 0 0 8px; }
+.co-jd-block h4 { font-size: 13px; font-weight: 600; color: var(--ui-muted); margin: 10px 0 4px; }
+.co-jd-list { margin: 0; padding-left: 20px; }
+.co-jd-list li { font-size: 14px; color: var(--ui-text); line-height: 1.7; }
+.co-jd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-jd-chip { font-size: 12px; color: var(--ui-text); border: 1px solid var(--ui-border-soft); border-radius: 6px; padding: 3px 10px; background: var(--ui-bg); }
+.co-jd-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ui-border-soft); font-size: 12px; color: var(--ui-muted); display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.co-jd-company-k { color: var(--ui-muted); margin-right: 6px; }
+.co-jd-time { color: var(--ui-text); }
+
+/* 编辑弹层内 JD 子编辑器 */
+.co-jd-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--ui-text); font-weight: 600; margin-top: 14px; }
+.co-jd-list { display: flex; flex-direction: column; gap: 14px; }
+.co-jd-item { border: 1px solid var(--ui-border-soft); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--ui-bg); }
+.co-jd-item-bar { display: flex; align-items: center; gap: 8px; }
+.co-jd-item-title { font-size: 13px; font-weight: 700; color: var(--ui-text); }
+.co-jd-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.co-jd-grid .tk-field { margin: 0; }
+@media (max-width: 640px) { .co-jd-grid { grid-template-columns: 1fr 1fr; } }
+
+/* 列表行可点击进入详情 */
+.co-table tbody tr { cursor: pointer; }
+.co-table tbody tr:hover { background: var(--ui-row); }
+
+@media (max-width: 640px) {
+  /* 公司表格：手机端保留「公司」列，隐藏行业/地点次要列（覆盖通用 .tk-table 隐藏首列规则） */
+  .co-table th:nth-child(1), .co-table td:nth-child(1) { display: table-cell !important; }
+  .co-table th:nth-child(2), .co-table td:nth-child(2),
+  .co-table th:nth-child(3), .co-table td:nth-child(3) { display: none; }
+  .co-search { min-width: 120px; }
 }
 
 @media (max-width: 640px) {

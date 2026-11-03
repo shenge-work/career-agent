@@ -22,9 +22,13 @@
     '    <span class="rail-icon" aria-hidden="true">▦</span>' +
     '    <span class="rail-label">简历库</span>' +
     '  </button>' +
-    '  <button type="button" class="rail-item" data-nav="/tracker" title="投递追踪">' +
+    '  <button type="button" class="rail-item" data-nav="/tracker" title="投递管理（平台 / 状态 / IM 聊天记录）">' +
     '    <span class="rail-icon" aria-hidden="true">☰</span>' +
     '    <span class="rail-label">投递</span>' +
+    '  </button>' +
+    '  <button type="button" class="rail-item" data-nav="/companies" title="公司档案（背景 / 团队 / 调研 / JD）">' +
+    '    <span class="rail-icon" aria-hidden="true">▦</span>' +
+    '    <span class="rail-label">公司</span>' +
     '  </button>' +
     /* AI 整条链路（presets / provider / 面板交互）尚未开发完：置灰 + 「开发中」徽标，
        disabled 阻断点击；等链路收口后去掉 disabled / is-disabled / 徽标即可恢复。 */

@@ -192,6 +192,10 @@
       run: "ResumeRouter.navigate('/tracker')", d: '页面', m: '页面'
     },
     {
+      label: '公司档案', title: '集中沉淀各公司的背景 / 团队 / 融资 / 竞品等调研与 JD；纯背景参考，与投递进度无关',
+      run: "ResumeRouter.navigate('/companies')", d: '页面', m: '页面'
+    },
+    {
       label: '设置（飞书 / 外观 / 数据备份）', title: '飞书配置、外观与数据',
       run: "ResumeRouter.navigate('/settings')", d: '页面', m: '页面'
     },

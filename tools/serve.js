@@ -374,6 +374,83 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // —— 公司调研数据（整集合落盘 data/companies/companies.json）——
+  // 与简历库同一思路：npm start 时写文件（持久、跨刷新不丢），离线 / 双击打开时前端自动降级 localStorage。
+  const COMPANY_DIR = path.join(ROOT, 'data', 'companies');
+  const COMPANY_FILE = path.join(COMPANY_DIR, 'companies.json');
+  if (req.method === 'GET' && pathname === '/api/companies') {
+    return send(res, 200, { companies: readJsonFile(COMPANY_FILE) || [] });
+  }
+  if (req.method === 'POST' && pathname === '/api/companies') {
+    let buf = '';
+    req.on('data', (c) => { buf += c; if (buf.length > 5 * 1024 * 1024) req.destroy(); });
+    req.on('end', () => {
+      let arr;
+      try { arr = JSON.parse(buf); } catch (e) { return send(res, 400, { error: 'JSON 解析失败: ' + e.message }); }
+      if (!Array.isArray(arr)) return send(res, 400, { error: 'companies 必须是数组' });
+      try { writeJsonFile(COMPANY_FILE, arr); return send(res, 200, { ok: true }); }
+      catch (e) { return send(res, 500, { error: '写入公司数据失败: ' + e.message }); }
+    });
+    return;
+  }
+
+  // —— 投递聊天的「种子包」：把截图整理好的聊天记录落盘，前端按版本号一次性并入 ——
+  // 投递记录本身仍存浏览器 localStorage（避免覆盖用户已有数据），
+  // 这里只提供只读的种子文件（data/tracker/seed.json），前端用 SEED_KEY 记住已并入的版本。
+  const SEED_FILE = path.join(ROOT, 'data', 'tracker', 'seed.json');
+  if (req.method === 'GET' && pathname === '/api/tracker-seed') {
+    const seed = readJsonFile(SEED_FILE);
+    if (!seed || !Array.isArray(seed.records)) return send(res, 200, { version: 0, records: [] });
+    return send(res, 200, seed);
+  }
+
+  // —— IM 聊天采集：驱动「已登录 BOSS 直聘的 Chrome」（远程调试端口）抽取聊天记录 ——
+  // 依赖本机 Chrome 以 --remote-debugging-port 启动；未开启时返回 hint 引导用户。
+  if (req.method === 'POST' && pathname === '/api/collect-chat') {
+    let buf = '';
+    req.on('data', (c) => { buf += c; if (buf.length > 1024 * 1024) req.destroy(); });
+    req.on('end', () => {
+      let body = {};
+      try { body = JSON.parse(buf || '{}'); } catch (e) {}
+      const company = String(body.company || '');
+      const port = String(process.env.CDP_PORT || body.port || 9222);
+      const script = path.join(ROOT, 'tools', 'boss-collect.js');
+      let out = '';
+      let done = false;
+      const finish = (obj) => {
+        if (done) return;
+        done = true;
+        return send(res, 200, obj);
+      };
+      let child;
+      try {
+        child = spawn(process.execPath, [script, '--port', port, '--company', company], {
+          cwd: ROOT, env: process.env
+        });
+      } catch (e) {
+        return finish({ ok: false, messages: [], hint: '无法启动采集脚本：' + e.message });
+      }
+      const killer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch (e) {}
+        finish({ ok: false, messages: [], hint: '采集超时（20s）。请确认 Chrome 远程调试端口可用。' });
+      }, 20000);
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { out += d; });
+      child.on('close', () => {
+        clearTimeout(killer);
+        let obj = null;
+        try { obj = JSON.parse(out); } catch (e) {}
+        if (!obj) return finish({ ok: false, messages: [], hint: '采集脚本无有效输出。' });
+        return finish(obj);
+      });
+      child.on('error', (e) => {
+        clearTimeout(killer);
+        finish({ ok: false, messages: [], hint: '采集脚本运行失败：' + e.message });
+      });
+    });
+    return;
+  }
+
   // —— 静默 PDF：请求体是完整数据 payload，返回 application/pdf 直接下载 ——
   if (req.method === 'POST' && pathname === '/api/pdf') {
     let buf = '';

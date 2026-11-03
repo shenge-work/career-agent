@@ -17,7 +17,9 @@
     "mobile:android:build": "npm run desktop:assets && tauri android build",
     "icons:gen": "node tools/gen-icons.js",
     "clean:html": "node tools/clean-html-injections.js",
-    "verify:assets": "node tools/verify-frontend-assets.js"
+    "verify:assets": "node tools/verify-frontend-assets.js",
+    "research:export": "node tools/export-company-research.js",
+    "research:check": "node tools/export-company-research.js --check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

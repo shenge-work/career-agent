@@ -337,6 +337,120 @@ for (const c of snippetCases) {
   catch (e) { fileResults.push({ name: 'snippets › ' + c.name + '（抛错: ' + (e && e.message ? e.message : e) + '）', pass: false }); }
 }
 
+/* ---------- 公司调研板块：数据层纯函数用例 + 视图解析校验 ----------
+   company-store.js 是 IIFE + CommonJS 双环境模块，require 安全（不触发 fetch / localStorage）；
+   company-view.js 是 window IIFE，在 vm 里按浏览器同路径加载做「解析 + 加载不抛错」校验。 */
+const companyStore = require(path.join(ROOT, 'js', 'store', 'company-store.js'));
+const companyCases = fs.existsSync(path.join(ROOT, 'test', 'cases-company.js'))
+  ? require(path.join(ROOT, 'test', 'cases-company.js')) : [];
+const companyCtx = {
+  Store: companyStore,
+  assert(cond, msg) { fileResults.push({ name: 'company › ' + msg, pass: !!cond }); },
+};
+for (const c of companyCases) {
+  try { c.fn(companyCtx); }
+  catch (e) { fileResults.push({ name: 'company › ' + c.name + '（抛错: ' + (e && e.message ? e.message : e) + '）', pass: false }); }
+}
+try {
+  // 复刻浏览器加载顺序：company-store.js（window.ResumeCompanyStore）先于 company-view.js
+  ctx.window.ResumeCompanyStore = companyStore;
+  const cvCode = fs.readFileSync(path.join(ROOT, 'js', 'views', 'company-view.js'), 'utf8');
+  vm.runInContext(cvCode, ctx, { filename: 'company-view.js' });
+  const cv = ctx.window.CompanyView;
+  if (!cv || typeof cv.detailHtml !== 'function') {
+    fileResults.push({ name: 'company › 视图暴露 detailHtml 方法', pass: false });
+  } else {
+    const jdTs = companyStore.fromDateTimeLocal('2026-05-20T14:30');
+    const sample = {
+      id: 'co_x', name: '测试公司', industry: 'AI', scale: '50人', location: '深圳', website: 'https://x.com',
+      applied: true, note: '备注一下',
+      research: [
+        { platform: '官网', dim: '融资情况', content: '融资内容', date: '2026-10', url: 'https://x.com/fund' },
+        { platform: '脉脉', dim: '团队情况', content: '团队内容', date: '', url: '' },
+        { platform: '其他', dim: '乱写', content: '兜底的', date: '', url: '' }
+      ],
+      jds: [
+        {
+          id: 'jd_1', title: 'Agent研发高级工程师', salary: '30-60K', city: '深圳', experience: '5-10年', education: '本科',
+          recruiter: '刘女士·HRBP', source: 'BOSS直聘', appliedAt: jdTs,
+          skills: ['Java', 'Python', 'MySQL'], benefits: ['节日福利', '餐补'],
+          companyInfo: '已上市 · 1000-9999人 · 互联网', url: 'https://x.com/job',
+          duties: ['负责Agent平台架构设计', '深入LangGraph源码'],
+          requirements: ['精通Java/Python', '熟悉分布式系统']
+        }
+      ]
+    };
+    const html = cv.detailHtml(sample);
+    fileResults.push({ name: 'company › detailHtml 渲染公司名', pass: html.indexOf('测试公司') >= 0 });
+    fileResults.push({ name: 'company › detailHtml 按业务维度分区块（融资情况/团队情况/其他）',
+      pass: html.indexOf('融资情况') >= 0 && html.indexOf('团队情况') >= 0 && html.indexOf('其他') >= 0 });
+    fileResults.push({ name: 'company › detailHtml 标注来源平台 + 渲染链接',
+      pass: html.indexOf('官网') >= 0 && html.indexOf('脉脉') >= 0 && html.indexOf('https://x.com/fund') >= 0 });
+    fileResults.push({ name: 'company › detailHtml 纯档案（不含投递/入库/锁简历状态）',
+      pass: html.indexOf('已投递') < 0 && html.indexOf('已入库') < 0 && html.indexOf('锁简历') < 0 });
+    fileResults.push({ name: 'company › companyBriefHtml 可复用（含调研+JD，不含页头）',
+      pass: typeof cv.companyBriefHtml === 'function' &&
+            cv.companyBriefHtml(sample).indexOf('融资情况') >= 0 &&
+            cv.companyBriefHtml(sample).indexOf('Agent研发高级工程师') >= 0 &&
+            cv.companyBriefHtml(sample).indexOf('settings-header') < 0 });
+    fileResults.push({ name: 'company › detailHtml 含「岗位 / JD」区块与岗位名',
+      pass: html.indexOf('岗位 / JD') >= 0 && html.indexOf('Agent研发高级工程师') >= 0 });
+    fileResults.push({ name: 'company › detailHtml 仿 BOSS 渲染：薪资/招聘者/职责/要求/技能/福利/公司信息',
+      pass: html.indexOf('30-60K') >= 0 && html.indexOf('刘女士·HRBP') >= 0 &&
+            html.indexOf('职位描述') >= 0 && html.indexOf('岗位职责') >= 0 && html.indexOf('任职要求') >= 0 &&
+            html.indexOf('技能要求') >= 0 && html.indexOf('福利待遇') >= 0 && html.indexOf('已上市 · 1000-9999人 · 互联网') >= 0 });
+    fileResults.push({ name: 'company › detailHtml 渲染 JD 投递时刻（含 HH:MM）与来源',
+      pass: html.indexOf('2026-05-20 14:30') >= 0 && html.indexOf('BOSS直聘') >= 0 });
+    fileResults.push({ name: 'company › detailHtml JD 技能/福利切为 chip',
+      pass: html.indexOf('co-jd-chip') >= 0 && html.indexOf('Java') >= 0 && html.indexOf('节日福利') >= 0 });
+  }
+} catch (e) {
+  fileResults.push({ name: '加载期异常（js/views/company-view.js）: ' + (e && e.message ? e.message : e), pass: false });
+}
+
+/* ---------- 投递板块：聊天「种子包」并入逻辑 ----------
+   tracker-view.js 是 window IIFE，加载时不触碰 DOM/localStorage（惰性访问），
+   这里直接调 applySeed 验证：只并入已存在记录、同文本去重、版本号幂等。 */
+try {
+  const tvCode = fs.readFileSync(path.join(ROOT, 'js', 'views', 'tracker-view.js'), 'utf8');
+  vm.runInContext(tvCode, ctx, { filename: 'tracker-view.js' });
+  const tv = ctx.window.TrackerView;
+  if (!tv || typeof tv.applySeed !== 'function') {
+    fileResults.push({ name: 'tracker › 视图暴露 applySeed 方法', pass: false });
+  } else {
+    tv.list = [
+      { id: 'tk_a', company: '甲公司', companyId: '', position: 'Agent 研发高级工程师', chat: [] },
+      { id: 'tk_b', company: '丙公司', companyId: '', position: '后端工程师', chat: [{ id: 'm1', role: 'me', name: '', ts: null, text: '原有消息' }] }
+    ];
+    const seed = {
+      version: 7,
+      records: [
+        { company: '甲公司', position: 'Agent研发高级工程师', chat: [   // 岗位空格差异也应匹配
+          { role: 'hr', name: '刘女士·HRBP', ts: 1000, text: '方便聊一聊么' },
+          { role: 'me', name: '', ts: null, text: '在的' }
+        ] },
+        { company: '乙公司（不存在）', position: 'X', chat: [{ role: 'hr', name: '', ts: null, text: '不该出现' }] },
+        { company: '丙公司', position: '后端工程师', chat: [{ role: 'me', name: '', ts: null, text: '原有消息' }] }
+      ]
+    };
+    const added = tv.applySeed(seed);
+    fileResults.push({ name: 'tracker › applySeed 只并入已存在记录（不新建公司）', pass: added === 2 && tv.list.length === 2 });
+    fileResults.push({ name: 'tracker › applySeed 岗位空格差异仍能匹配',
+      pass: tv.list[0].chat.length === 2 && tv.list[0].chat[0].text === '方便聊一聊么' });
+    fileResults.push({ name: 'tracker › applySeed 同文本去重（原有消息不重复）', pass: tv.list[1].chat.length === 1 });
+    fileResults.push({ name: 'tracker › applySeed 不把未匹配公司的消息塞进任何记录',
+      pass: JSON.stringify(tv.list).indexOf('不该出现') < 0 });
+    const again = tv.applySeed(seed);
+    fileResults.push({ name: 'tracker › applySeed 版本号幂等（重复调用不再追加）',
+      pass: again === 0 && tv.list[0].chat.length === 2 });
+    // 更高版本、同样内容 → 去重后无新增
+    fileResults.push({ name: 'tracker › applySeed 新版本同内容不产生副本',
+      pass: tv.applySeed({ version: 9, records: seed.records }) === 0 && tv.list[0].chat.length === 2 });
+  }
+} catch (e) {
+  fileResults.push({ name: '加载期异常（js/views/tracker-view.js）: ' + (e && e.message ? e.message : e), pass: false });
+}
+
 /* ---------- 飞书扫码授权：buildAuthorizeUrl 纯函数用例 ----------
    feishu-oauth.js 是纯 Node CommonJS 模块；buildAuthorizeUrl 是纯函数（不触发网络）。
    测试里用临时 mock 覆盖 sync.config.json 读取，不依赖本机真实配置。 */
@@ -914,6 +1028,31 @@ for (const c of pfCases) {
   pfChain = pfChain.then(() => c.fn(pfCtx))
     .catch((e) => { fileResults.push({ name: 'portfolio › ' + c.name + '（抛错: ' + (e && e.message ? e.message : e) + '）', pass: false }); });
 }
+
+/* ---------- 文件级冒烟断言：公司调研板块接线（防「写了但没接」）----------
+   失效面：数据层 / 视图没被引入、引入顺序错（bootstrap 注册时取不到 CompanyView）、
+   路由没注册、rail / 菜单入口缺失、单文件构建漏打包。 */
+const bootstrapCode = fs.readFileSync(path.join(ROOT, 'js', 'router', 'bootstrap.js'), 'utf8');
+const layoutRailCode = fs.readFileSync(path.join(ROOT, 'js', 'router', 'layout.js'), 'utf8');
+const buildSingleCode = fs.readFileSync(path.join(ROOT, 'tools', 'build-single.js'), 'utf8');
+F('index.html 引入 js/store/company-store.js', /<script src="js\/store\/company-store\.js"><\/script>/.test(htmlClean));
+F('index.html 引入 js/views/company-view.js', /<script src="js\/views\/company-view\.js"><\/script>/.test(htmlClean));
+F('company-store.js 排在 app.js 之前（视图依赖其 ResumeCompanyStore）',
+  htmlClean.indexOf('js/store/company-store.js') < htmlClean.indexOf('<script src="js/app.js"></script>'));
+F('company-view.js 排在 app.js 之前（bootstrap 注册时取得到 CompanyView）',
+  htmlClean.indexOf('js/views/company-view.js') < htmlClean.indexOf('<script src="js/app.js"></script>'));
+F('bootstrap.js 注册 /companies 路由到 CompanyView',
+  /register\('\/companies',\s*global\.CompanyView\)/.test(bootstrapCode));
+F('左侧 rail 含公司档案入口（data-nav="/companies"）',
+  /data-nav="\/companies"/.test(layoutRailCode));
+F('统一入口清单含公司档案项且指向 /companies',
+  /公司档案/.test(menuDesktop) && /navigate\('\/companies'\)/.test(menuActionsCode));
+F('bootstrap.js 注册投递详情路由 /tracker/:id',
+  /register\('\/tracker\/:id',\s*global\.TrackerView\)/.test(bootstrapCode));
+F('投递板块读取 /api/companies 以内嵌公司背景',
+  /\/api\/companies/.test(fs.readFileSync(path.join(ROOT, 'js', 'views', 'tracker-view.js'), 'utf8')));
+F('build-single.js 内联 company-store.js 与 company-view.js（单文件版可用）',
+  /js\/store\/company-store\.js/.test(buildSingleCode) && /js\/views\/company-view\.js/.test(buildSingleCode));
 
 /* ---------- 报告（等异步的 library 用例跑完再输出） ---------- */
 libChain.then(() => lhChain).then(() => ssChain).then(() => jdChain).then(() => nativeExportChain).then(() => menuChain).then(() => undoChain).then(() => reorderChain).then(() => perfChain).then(() => saveDebounceChain).then(() => themeChain).then(() => shareChain).then(() => pfChain).then(() => httpChain).then(() => {
