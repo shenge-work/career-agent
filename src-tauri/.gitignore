@@ -1,5 +1,0 @@
-// 构建产物（Rust / Tauri 编译输出，体积极大，不入库）
-/target
-
-# 生成物：windows 侧签名脚本等临时文件
-/gen/schemas

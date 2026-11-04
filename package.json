@@ -1,30 +1,53 @@
 {
-  "name": "resume-builder",
-  "version": "1.1.0",
+  "name": "career-agent",
+  "version": "0.1.0",
   "private": true,
-  "description": "简历编辑器（拖拽排版 / 纯文本编辑），含单文件版构建与核心逻辑测试",
+  "type": "commonjs",
+  "description": "CareerAgent - 个人求职 Agent 工作台（本地服务器 + 账号行级隔离）",
   "scripts": {
-    "tauri": "tauri",
-    "start": "node tools/serve.js",
-    "test": "node test/run.js",
-    "build": "node tools/build-single.js",
-    "desktop:assets": "node tools/build-desktop-frontend.js",
-    "desktop:dev": "npm run desktop:assets && tauri dev",
-    "desktop:build": "npm run desktop:assets && tauri build",
-    "desktop:dmg": "node tools/build-dmg.js",
-    "mobile:android:init": "npm run desktop:assets && tauri android init",
-    "mobile:android:dev": "npm run desktop:assets && tauri android dev",
-    "mobile:android:build": "npm run desktop:assets && tauri android build",
-    "icons:gen": "node tools/gen-icons.js",
-    "clean:html": "node tools/clean-html-injections.js",
-    "verify:assets": "node tools/verify-frontend-assets.js",
-    "research:export": "node tools/export-company-research.js",
-    "research:check": "node tools/export-company-research.js --check"
+    "dev": "concurrently -k -n server,web -c gray,white \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "ts-node -r tsconfig-paths/register src/server/main.ts",
+    "dev:web": "vite --host 127.0.0.1 --port 5173",
+    "build": "tsc -p tsconfig.json && vite build",
+    "start": "node dist-server/server/main.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "ts-node src/server/db/migrate.ts",
+    "seed:user": "ts-node src/server/db/seed-user.ts",
+    "import:v1": "ts-node src/server/db/import-v1.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.15",
+    "@nestjs/common": "^12.3.2",
+    "@nestjs/core": "^12.3.2",
+    "@nestjs/platform-fastify": "^12.3.2",
+    "@node-rs/argon2": "^2.2.2",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@nestjs/testing": "^12.3.2",
+    "@tanstack/react-query": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^9.0.0",
+    "drizzle-kit": "^0.31.11",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.5",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=22.12"
   }
 }

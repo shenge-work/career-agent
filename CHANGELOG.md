@@ -5,14 +5,62 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-> **发版规则（与 CI 联动，改动前请先读 `docs/构建与发版/发版说明.md`）**
->
-> 1. 版本号以 `src-tauri/tauri.conf.json` 的 `version` 为**唯一权威**，`package.json` 必须与之一致
->    （发版流水线会校验，不一致直接失败）。
-> 2. 发版时把下面 `## [Unreleased]` 整段改成 `## [x.y.z] - YYYY-MM-DD`，
->    并新开一个空的 `## [Unreleased]`。
-> 3. GitHub Release 的**更新说明由流水线从本文件对应版本章节自动抽取**；
->    若找不到对应章节会退回 `[Unreleased]`，两者都没有则**发版失败** —— 即「必须有版本更新描述」。
+> **发版规则更新（2026-11-04，v1 退役后）**：v1 的「以 `src-tauri/tauri.conf.json` 为唯一权威 +
+> 推 `v*` 标签自动构建三平台安装包」的流水线已随 Tauri 壳一起退役。当前为本地服务器形态、
+> 无 CI 发版；首次以新形态对外发布时再定义版本权威来源与流水线。
+
+---
+
+## [Unreleased]
+
+### 变更（2026-11-04 · v2 升级为项目主目录，v1 退役）
+
+- **v1 代码全部移除，v2 上移为仓库根**：项目切换为纯本地服务器形态
+  （React + NestJS + PostgreSQL 兼容库）。盘点结论为「v1 未被全部迁移」
+  （缺投递体检 / JD 匹配分析 / JD 派生 / Word·TXT·MD 导出 / 撤销重做 / 主题模板 /
+  缩略图 / 分享页 / Portfolio 等），经用户确认按「立即切换」执行：缺失能力列入
+  [ROADMAP](./ROADMAP.md) 分期重建，不阻塞切换。v1 的 git 历史仍可追溯。
+- **渲染引擎资产收编**：v2 预览 / PDF 依赖的 v1 源码（8 个 JS + `css/style.css` +
+  `vendor/html2canvas` / `jspdf` + `tools/boss-collect.js` + Chrome 调试启动脚本）
+  从 v1 路径 git mv 到 `legacy/`，探测逻辑改为项目内向上查找；渲染与 PDF 契约
+  逐项实测不变（预览 92KB 含全部板块、矢量 PDF 987KB `%PDF-1.4`、图片版分页契约测试全绿）。
+- **随 v1 一并退役**：file:// 单文件离线版与 `build-single`、Tauri 桌面 / 安卓壳、
+  CI 三平台发版流水线（`.github/workflows`）、v1 测试套件、`data/*.json` 文件写入与
+  localStorage / IndexedDB 降级存储、`sync.config.json` / `ai.config.json` 等本地配置文件
+  （`data/` 保留为迁移前原始数据备份，gitignored）。
+- **飞书远程存储整体拆除（用户决策）**：数据已全部本地化到 PostgreSQL，「上报飞书云盘借
+  版本历史」的外部链路不再需要——`src/server/sync/` 模块、`SyncSettings` 面板、
+  Editor 同步条、`0003_sync.sql` 建的三张表（经 `0004_drop_sync.sql` 拆除）、
+  回环守卫的 OAuth 回调跨站豁免全部移除。**飞书模块从上线到拆除未发布过任何版本，属内部迭代**。
+- **AI 本地配置文件回退移除**：`ai.config.json`（及 example）删除，AI 上游配置只认
+  账号级数据库配置，显式清空即停用。
+- **版本历史结合 PostgreSQL 重新设计（取代飞书云盘版本）**：
+  - `POST /api/resumes/:resumeId/versions/:versionId/restore`：恢复任意历史版本到简历正文；
+    **恢复前当前内容自动存为新版本（kind=auto、label 标注时间）——恢复本身可逆**；
+    他人版本一律 404 不泄露存在性。
+  - 保留策略（v1 N11 策略的服务端化，`version-policy.ts` 纯函数可单测）：
+    手动命名快照**永不清理**；自动留痕最近 50 条全保留，更早按自然日「每天首尾 2 条」
+    降采样、最长 30 天；不再有 5MB 配额限制（PG 行内 jsonb 不是 localStorage）。
+  - 前端简历库版本列表逐版本「恢复」按钮（二次确认 + 恢复前自动备份提示）。
+  - 测试：新增 `test/versions.e2e.test.ts` 9 条（策略纯函数 4 + 恢复闭环 5，含可逆性、
+    跨用户 404、真实降采样收敛）；两组变异全部证伪有效（删 manual 永保 → 4 红、
+    删恢复前快照 → 1 红）。
+- **验收**：主目录形态全量 `npm test` **103 通过 / 3 跳过（共 106，8 个文件）**、
+  `npm run build` 通过；真实运行时验证：dev 起动、登录、10 份简历列表、预览 92KB、
+  矢量 PDF 987KB、版本恢复端到端冒烟（造快照 → 恢复 → 正文变更确认 → 还原）、
+  已拆端点 404。测试计数由拆 sync（-43）与加 versions（+9）共同变化：137 → 94 → 103。
+
+### 新增
+
+- **公司档案 D7 第一批落地**（设计修订与实施记录见
+  [docs/需求文档/D7-公司档案板块设计.md](./docs/需求文档/D7-公司档案板块设计.md)）：
+  行业分类词表（一级门类 → 二级赛道 + 同义词扩展）、摘要与标签、六维完整度、
+  卡片化列表 + 行业筛选与搜索、详情分区展示、Markdown 公司简报。
+
+### 历史记录说明
+
+- 本文件此条目之上的全部历史记录属于 **v1（零后端单文件形态）**，随 v1 退役归档；
+  其中描述的功能与 v2 现状可能不一致，以 README / ROADMAP 为准。
 
 ---
 
@@ -547,3 +595,5 @@
 
 ### 安全
 - 仓库含示例个人简历数据（`js/data.js`），公开仓库前请替换为占位内容或确认无隐私风险。
+
+> AI生成

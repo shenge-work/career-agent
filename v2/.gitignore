@@ -1,8 +1,0 @@
-node_modules/
-dist-server/
-dist-web/
-pgdata/
-backups/
-drizzle/generated/
-.env
-*.log
