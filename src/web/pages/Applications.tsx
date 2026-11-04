@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -190,6 +190,7 @@ export default function Applications() {
               app={selected}
               company={selectedCompany}
               resume={selectedResume}
+              resumes={resumes}
               onStatus={(status) => statusM.mutate({ id: selected.id, status })}
               pending={statusM.isPending}
             />
@@ -200,36 +201,150 @@ export default function Applications() {
   );
 }
 
+type MatchTerm = { term: string; hits: number; jdCount: number };
+type MatchResult = {
+  stats: { total: number; covered: number; weak: number; missing: number; score: number };
+  groups: { covered: MatchTerm[]; weak: MatchTerm[]; missing: MatchTerm[] };
+  termCount?: number;
+};
+
+function MatchGroup({
+  title,
+  tone,
+  terms,
+}: {
+  title: string;
+  tone: 'covered' | 'weak' | 'missing';
+  terms: MatchTerm[];
+}) {
+  if (!terms.length) return null;
+  return (
+    <div className="match-group">
+      <span className={`match-label ${tone}`}>
+        {title}（{terms.length}）
+      </span>
+      <div className="match-tags">
+        {terms.slice(0, 12).map((t, i) => (
+          <span
+            key={i}
+            className={`match-tag ${tone}`}
+            title={`简历命中 ${t.hits} 次 · JD 出现 ${t.jdCount} 次`}
+          >
+            {t.term}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ApplicationDetail({
   app,
   company,
   resume,
+  resumes,
   onStatus,
   pending,
 }: {
   app: ApplicationItem;
   company: CompanyItem | null;
   resume: ResumeItem | null;
+  resumes: ResumeItem[];
   onStatus: (s: ApplicationItem['status']) => void;
   pending: boolean;
 }) {
   const qc = useQueryClient();
   const [pitchError, setPitchError] = useState('');
   const [copied, setCopied] = useState<'greeting' | 'coverLetter' | null>(null);
+  const [jdText, setJdText] = useState<string>((app.payload?.jdText as string) || '');
+  const [jdSaved, setJdSaved] = useState(false);
+  const [match, setMatch] = useState<MatchResult | null>(null);
+  const [matchError, setMatchError] = useState('');
+  const [derivedId, setDerivedId] = useState<string | null>(null);
+
+  // 切换岗位时同步 JD 文本与派生状态
+  useEffect(() => {
+    setJdText((app.payload?.jdText as string) || '');
+    setJdSaved(false);
+    setMatch(null);
+    setMatchError('');
+    setDerivedId(null);
+  }, [app.id]);
 
   const { data: events = [] } = useQuery({
     queryKey: ['application-events', app.id],
     queryFn: () => api<ApplicationEvent[]>(`/applications/${app.id}/events`),
   });
 
+  /** 目标简历：优先岗位已关联的，否则取主简历，再退到第一份。 */
+  const targetResumeId = () =>
+    app.resumeId || resumes.find((r) => r.isMaster)?.id || resumes[0]?.id || '';
+
+  const jdSaveM = useMutation({
+    mutationFn: () => put(`/applications/${app.id}`, { payload: { ...(app.payload || {}), jdText } }),
+    onSuccess: () => {
+      setJdSaved(true);
+      qc.invalidateQueries({ queryKey: ['applications'] });
+    },
+    onError: (e) => setMatchError((e as Error).message),
+  });
+
+  const resumeM = useMutation({
+    mutationFn: (resumeId: string) => put(`/applications/${app.id}`, { resumeId: resumeId || undefined }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['applications'] }),
+    onError: (e) => setMatchError((e as Error).message),
+  });
+
   const pitchM = useMutation({
-    mutationFn: () => post<GenPitchResult>('/agent/gen-pitch', { applicationId: app.id }),
+    // 即使 JD 尚未保存到库，也把当前文本一并带过去，保证「粘 JD → 话术」一次闭环
+    mutationFn: () => post<GenPitchResult>('/agent/gen-pitch', { applicationId: app.id, jdText: jdText.trim() }),
     onSuccess: () => {
       setPitchError('');
       setCopied(null);
       qc.invalidateQueries({ queryKey: ['applications'] });
     },
     onError: (e) => setPitchError((e as Error).message),
+  });
+
+  const matchM = useMutation({
+    mutationFn: () => {
+      const rid = targetResumeId();
+      if (!rid) throw new Error('请先在「简历库」创建或关联一份简历');
+      if (!jdText.trim()) throw new Error('请先在上方填写岗位 JD');
+      return post<MatchResult>('/resumes/' + rid + '/jd-analyze', { jdText: jdText.trim() });
+    },
+    onSuccess: (r) => {
+      setMatch(r);
+      setMatchError('');
+    },
+    onError: (e) => {
+      setMatch(null);
+      setMatchError((e as Error).message);
+    },
+  });
+
+  const deriveM = useMutation({
+    mutationFn: async () => {
+      const rid = targetResumeId();
+      if (!rid) throw new Error('请先关联一份简历');
+      if (!jdText.trim()) throw new Error('请先填写岗位 JD');
+      const tags = company ? [company.name] : [];
+      const row = await post<ResumeItem>('/resumes/' + rid + '/jd-derive', {
+        jdText: jdText.trim(),
+        jobId: app.id,
+        tags,
+      });
+      // 派生简历自动关联回岗位，闭合「JD → 定制简历 → 岗位」血缘
+      await put(`/applications/${app.id}`, { resumeId: row.id });
+      return row;
+    },
+    onSuccess: (row) => {
+      setDerivedId(row.id);
+      qc.invalidateQueries({ queryKey: ['applications'] });
+      qc.invalidateQueries({ queryKey: ['resumes'] });
+      setMatchError('');
+    },
+    onError: (e) => setMatchError((e as Error).message),
   });
 
   const pitch = app.payload?.pitch as {
@@ -261,20 +376,22 @@ function ApplicationDetail({
           </span>
         </span>
         <span>公司</span>
+        <span>{company ? <Link to="/companies">{company.name}</Link> : '—'}</span>
+        <span>关联简历</span>
         <span>
-          {company ? (
-            <Link to="/companies">{company.name}</Link>
-          ) : (
-            '—'
-          )}
-        </span>
-        <span>简历</span>
-        <span>
-          {resume ? (
-            <Link to={`/editor/${resume.id}`}>{resume.title}</Link>
-          ) : (
-            '—'
-          )}
+          <select
+            value={app.resumeId || ''}
+            onChange={(e) => resumeM.mutate(e.target.value)}
+            style={{ maxWidth: 200 }}
+          >
+            <option value="">— 关联简历（可选）—</option>
+            {resumes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.title}
+                {r.isMaster ? '（主）' : ''}
+              </option>
+            ))}
+          </select>
         </span>
         <span>投递时间</span>
         <span>{app.appliedAt ? fmtTime(app.appliedAt) : '—'}</span>
@@ -284,10 +401,34 @@ function ApplicationDetail({
         <span>{fmtTime(app.updatedAt)}</span>
       </div>
 
+      {/* P0-1：JD 是第一公民，先有 JD 才有话术 / 匹配 / 派生 */}
+      <h3 className="sub">岗位 JD</h3>
+      <p className="muted small">
+        粘贴岗位描述（JD）。保存后可用于生成投递话术、做简历匹配分析、一键派生定制简历。
+      </p>
+      <textarea
+        rows={6}
+        value={jdText}
+        onChange={(e) => {
+          setJdText(e.target.value);
+          setJdSaved(false);
+        }}
+        placeholder="例：负责 B 端中后台前端……熟悉 React / TypeScript，有可视化与性能优化经验……"
+      />
+      <div className="btn-row" style={{ marginTop: 8 }}>
+        <button
+          className="mini primary"
+          disabled={jdSaveM.isPending || !jdText.trim()}
+          onClick={() => jdSaveM.mutate()}
+        >
+          {jdSaveM.isPending ? '保存中…' : jdSaved ? '已保存 ✓' : '保存 JD'}
+        </button>
+        {!jdSaved && jdText.trim() && <span className="muted small">有未保存的改动</span>}
+      </div>
+
       <h3 className="sub">投递话术</h3>
       <p className="muted small">
-        基于该岗位 JD 与你的简历生成打招呼话术（IM 场景）与求职信（邮件/官网投递）。
-        只引用简历中真实存在的经历。
+        基于该岗位 JD 与你的简历生成打招呼话术（IM 场景）与求职信（邮件/官网投递），只引用真实经历。
       </p>
       {pitchError && <div className="alert">{pitchError}</div>}
       <div className="btn-row" style={{ marginTop: 8 }}>
@@ -330,6 +471,46 @@ function ApplicationDetail({
         </div>
       ) : (
         <p className="muted small">尚未生成话术，点击上方按钮开始。</p>
+      )}
+
+      {/* P0-1：JD 匹配分析与一键派生，收编到岗位页，避免能力散落 */}
+      <h3 className="sub">简历匹配度</h3>
+      <p className="muted small">
+        用本岗位 JD 对关联简历做关键词覆盖分析（规则引擎，无需 AI）。绿色=已覆盖，黄色=弱覆盖，灰色=缺失。
+      </p>
+      {matchError && <div className="alert">{matchError}</div>}
+      <div className="btn-row" style={{ marginTop: 8 }}>
+        <button className="mini" disabled={matchM.isPending} onClick={() => matchM.mutate()}>
+          {matchM.isPending ? '分析中…' : '分析匹配度'}
+        </button>
+        <button
+          className="mini primary"
+          disabled={deriveM.isPending || !jdText.trim()}
+          onClick={() => deriveM.mutate()}
+        >
+          {deriveM.isPending ? '生成中…' : '一键派生定制简历'}
+        </button>
+      </div>
+
+      {match && (
+        <div className="match-box">
+          <div className="match-score">
+            匹配度 <strong>{Math.round(match.stats.score)}%</strong>
+            <span className="muted small">
+              （覆盖 {match.stats.covered} · 弱覆盖 {match.stats.weak} · 缺失 {match.stats.missing} / 共 {match.stats.total}）
+            </span>
+          </div>
+          <MatchGroup title="已覆盖" tone="covered" terms={match.groups.covered} />
+          <MatchGroup title="弱覆盖" tone="weak" terms={match.groups.weak} />
+          <MatchGroup title="缺失" tone="missing" terms={match.groups.missing} />
+        </div>
+      )}
+
+      {derivedId && (
+        <p className="muted small">
+          已生成派生简历：
+          <Link to={`/editor/${derivedId}`}>打开定制简历 →</Link>
+        </p>
       )}
 
       <h3 className="sub">面试复盘</h3>

@@ -47,6 +47,17 @@ export class AuthController {
     return { user: r.user };
   }
 
+  @Public()
+  @Post('dev-login')
+  @HttpCode(200)
+  async devLogin(
+    @Res({ passthrough: true }) reply: any
+  ): Promise<{ user: CurrentUserType }> {
+    const r = await this.auth.devLogin();
+    reply.header('Set-Cookie', sessionCookie(r.token, process.env.COOKIE_SECURE === 'true'));
+    return { user: r.user };
+  }
+
   @Post('logout')
   @HttpCode(200)
   async logout(

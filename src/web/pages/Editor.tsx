@@ -3,6 +3,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { api, exportTextUrl, pdfUrl, post, put, type ResumeItem } from '../api';
 
+/** 点击外部关闭下拉菜单的通用 hook：返回 ref 与开关，供主题/格式菜单复用。 */
+function useDismissible(initial = false) {
+  const [open, setOpen] = useState(initial);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  return { open, setOpen, ref };
+}
+
 /* =============================================================
  * 左预览 / 右编辑
  * -------------------------------------------------------------
@@ -232,8 +247,13 @@ export default function Editor() {
   const [showJson, setShowJson] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [busy, setBusy] = useState<'vector' | 'image' | null>(null);
-  const [showFormats, setShowFormats] = useState(false);
-  const [showThemes, setShowThemes] = useState(false);
+  const themesMenu = useDismissible(false);
+  const formatsMenu = useDismissible(false);
+  const [showHint, setShowHint] = useState(false);
+  // P0-4：A4 预览自适应宽度（默认「适应宽度」，可按需切「实际大小」）。
+  const [fitMode, setFitMode] = useState<'fit' | 'full'>('fit');
+  const [previewScale, setPreviewScale] = useState(1);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
   const loadedIdRef = useRef<string | null>(null);
   const baselineRef = useRef<string>('');
   // 撤销/重做：会话级内存栈（对齐 v1 undoRemove 语义，不写后端避免写放大）
@@ -356,6 +376,23 @@ export default function Editor() {
 
   const previewUrl = `/api/resumes/${encodeURIComponent(id)}/preview?v=${previewKey}`;
 
+  // P0-4：依据预览区可用宽度计算缩放比，让 794px 的 A4 内容完整可见（不再被裁掉约 20%）。
+  // 依赖 draft：预览 DOM 只在简历加载完成后才渲染，挂载时 ref 尚为空，须在加载完成后再挂 ResizeObserver。
+  useEffect(() => {
+    const el = previewScrollRef.current;
+    if (!el) return;
+    const A4_W = 794;
+    const fit = () => {
+      const contentW = el.clientWidth - 24; // 减去左右内边距
+      const s = Math.max(0.1, Math.min(1, contentW / A4_W));
+      setPreviewScale(fitMode === 'full' ? 1 : s);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [id, fitMode, draft]);
+
   async function downloadPdf(mode: 'vector' | 'image') {
     setError('');
     setBusy(mode);
@@ -386,15 +423,32 @@ export default function Editor() {
     }
   }
 
-  function downloadText(format: 'txt' | 'md' | 'doc') {
-    // 直接走浏览器下载；后端是纯结构化转换，无需 loading 态
-    const a = document.createElement('a');
-    a.href = exportTextUrl(id, format);
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setShowFormats(false);
+  async function downloadText(format: 'txt' | 'md' | 'doc') {
+    // 走 fetch + blob：后端转换若失败（如文件名含中文导致 500）能拿到 JSON 错误并提示，
+    // 而不是像 <a href> 那样把错误体当文件静默下载下来。
+    setError('');
+    try {
+      const res = await fetch(exportTextUrl(id, format), { credentials: 'include' });
+      if (!res.ok) {
+        const j: any = await res.json().catch(() => ({}));
+        throw new Error(j.error || j.message || `导出失败（HTTP ${res.status}）`);
+      }
+      const blob = await res.blob();
+      const ext = format === 'doc' ? 'doc' : format;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = ((dataNode?.name || data?.title || 'resume') + '.' + ext).replace(/[\\/:*?"<>|]/g, '_');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (e) {
+      // 导出失败与「自动保存失败」是两回事，只写 error 提示条，不污染保存状态
+      setError((e as Error).message);
+    } finally {
+      formatsMenu.setOpen(false);
+    }
   }
 
   // 主题列表（内置 5 套）
@@ -413,7 +467,7 @@ export default function Editor() {
       setStatus('saved');
       setPreviewKey((k) => k + 1);
       qc.invalidateQueries({ queryKey: ['resumes'] });
-      setShowThemes(false);
+      themesMenu.setOpen(false);
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -447,12 +501,19 @@ export default function Editor() {
           </p>
         </div>
         <div className="editor-actions">
-          <div className="menu-wrap">
-            <button className="ghost mini" onClick={() => setShowThemes((v) => !v)}>
+          <span className={'save-state ' + status}>
+            {status === 'saving' ? '保存中…' :
+             status === 'editing' ? '有未保存改动' :
+             status === 'saved' ? '已保存' :
+             status === 'error' ? '保存失败' : '已同步'}
+          </span>
+
+          <div className="menu-wrap" ref={themesMenu.ref}>
+            <button className="ghost mini" onClick={() => themesMenu.setOpen((v) => !v)}>
               主题：{activeThemeName} ▾
             </button>
-            {showThemes && (
-              <div className="menu-pop" onClick={(e) => e.stopPropagation()}>
+            {themesMenu.open && (
+              <div className="menu-pop" role="menu">
                 {themes.map((t) => (
                   <button
                     key={t.id}
@@ -467,65 +528,104 @@ export default function Editor() {
               </div>
             )}
           </div>
-          <button className="ghost mini" disabled={!canUndo} onClick={undo} title="撤销 (Cmd/Ctrl+Z)">↶ 撤销</button>
-          <button className="ghost mini" disabled={!canRedo} onClick={redo} title="重做 (Cmd/Ctrl+Shift+Z)">↷ 重做</button>
-          <span className={'save-state ' + status}>
-            {status === 'saving' ? '保存中…' :
-             status === 'editing' ? '有未保存改动' :
-             status === 'saved' ? '已保存 · 预览已刷新' :
-             status === 'error' ? '保存失败' : '已同步'}
-          </span>
-          <button className="ghost mini" disabled={!!busy} onClick={() => window.open(previewUrl, '_blank')}>
-            打印 / 另存为 PDF
-          </button>
-          <button className="mini primary" disabled={!!busy} onClick={() => downloadPdf('vector')}>
-            {busy === 'vector' ? '生成中…' : '矢量 PDF'}
-          </button>
-          <button className="ghost mini" disabled={!!busy} onClick={() => downloadPdf('image')}>
-            {busy === 'image' ? '生成中…（约数秒）' : '图片版 PDF'}
-          </button>
-          <div className="menu-wrap">
-            <button className="ghost mini" onClick={() => setShowFormats((v) => !v)}>
-              更多格式 ▾
+
+          <div className="menu-wrap" ref={formatsMenu.ref}>
+            <button className="ghost mini" onClick={() => formatsMenu.setOpen((v) => !v)}>
+              导出 ▾
             </button>
-            {showFormats && (
-              <div className="menu-pop" onClick={(e) => e.stopPropagation()}>
+            {formatsMenu.open && (
+              <div className="menu-pop" role="menu">
+                <button className="menu-item" onClick={() => downloadPdf('vector')} disabled={!!busy}>
+                  {busy === 'vector' ? '生成中…' : '矢量 PDF（文字可选）'}
+                </button>
+                <button className="menu-item" onClick={() => downloadPdf('image')} disabled={!!busy}>
+                  {busy === 'image' ? '生成中…（约数秒）' : '图片版 PDF（分页精准）'}
+                </button>
+                <div className="menu-sep" />
                 <button className="menu-item" onClick={() => downloadText('txt')}>纯文本 (.txt)</button>
                 <button className="menu-item" onClick={() => downloadText('md')}>Markdown (.md)</button>
                 <button className="menu-item" onClick={() => downloadText('doc')}>Word (.doc)</button>
               </div>
             )}
           </div>
+
+          <button className="ghost mini" onClick={() => window.open(previewUrl, '_blank')} disabled={!!busy}>
+            打印 / 另存
+          </button>
         </div>
       </div>
 
       {error && <div className="alert">{error}</div>}
 
       <div className="hint small">
-        <strong>加粗规则</strong>：只有「个人优势 / 自定义板块 / 技能关键词与说明」里的 <code>**文字**</code> 会渲染成粗体；
-        履历描述、项目描述、量化成果是纯文本，写 <code>**</code> 会露出字面星号。
-        <br />
-        <strong>两种 PDF</strong>：矢量版文字可选中、体积小；图片版复用 v1 分页算法、切口与预览一致但文字不可选中。
-        配色严格黑白灰。
+        <button className="hint-toggle" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
+          使用说明 {showHint ? '▴' : '▾'}
+        </button>
+        {showHint && (
+          <div className="hint-body">
+            <strong>加粗规则</strong>：只有「个人优势 / 自定义板块 / 技能关键词与说明」里的 <code>**文字**</code> 会渲染成粗体；
+            履历描述、项目描述、量化成果是纯文本，写 <code>**</code> 会露出字面星号。
+            <br />
+            <strong>两种 PDF</strong>：矢量版文字可选中、体积小；图片版复用 v1 分页算法、切口与预览一致但文字不可选中。
+            配色严格黑白灰。
+          </div>
+        )}
       </div>
 
       <div className="editor-grid">
         <section className="preview-pane">
           <div className="pane-cap">
             <span>简历预览（A4）</span>
+            <span className="spacer" />
+            <div className="seg">
+              <button
+                className={'seg-btn' + (fitMode === 'fit' ? ' active' : '')}
+                onClick={() => setFitMode('fit')}
+              >
+                适应宽度
+              </button>
+              <button
+                className={'seg-btn' + (fitMode === 'full' ? ' active' : '')}
+                onClick={() => setFitMode('full')}
+              >
+                实际大小
+              </button>
+            </div>
             <button className="mini" onClick={() => setPreviewKey((k) => k + 1)}>刷新</button>
           </div>
-          <iframe
-            ref={iframeRef}
-            key={previewKey}
-            className="preview-frame"
-            title="简历预览"
-            src={previewUrl}
-          />
+          <div className="preview-fit-scroll" ref={previewScrollRef}>
+            <div
+              className="preview-fit"
+              style={{ width: 794 * previewScale, height: 1123 * previewScale }}
+            >
+              <iframe
+                ref={iframeRef}
+                key={previewKey}
+                className="preview-frame"
+                title="简历预览"
+                src={previewUrl}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: 794,
+                  height: 1123,
+                  transform: `scale(${previewScale})`,
+                  transformOrigin: 'top left',
+                }}
+              />
+            </div>
+          </div>
         </section>
 
         <aside className="editor-pane">
-          <div className="pane-cap"><span>内容编辑</span><span className="muted small">自动保存</span></div>
+          <div className="pane-cap">
+            <span>内容编辑</span>
+            <span className="spacer" />
+            <button className="mini" disabled={!canUndo} onClick={undo} title="撤销 (Cmd/Ctrl+Z)">↶ 撤销</button>
+            <button className="mini" disabled={!canRedo} onClick={redo} title="重做 (Cmd/Ctrl+Shift+Z)">↷ 重做</button>
+            <span className="muted small">自动保存</span>
+          </div>
           <div className="editor-scroll">
             <Branch
               value={dataNode}

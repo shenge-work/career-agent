@@ -206,6 +206,28 @@ describe('版本恢复闭环（PG 版本功能重设计）', () => {
     expect(restore2.json().resumed.payload.data.sections[0].title).toBe('第二版');
   });
 
+  it('P0-3：正文改动经 PUT 后自动写入一条 auto 版本（编辑自动留痕）', async () => {
+    const rid = await createResume(cookieA, { data: { sections: [{ id: 's1', title: '初稿' }] }, name: 'W' });
+    const before = await app.inject({ method: 'GET', url: `/api/resumes/${rid}/versions`, headers: { cookie: cookieA } });
+    expect(before.json()).toHaveLength(0); // 创建不产生版本
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/api/resumes/${rid}`,
+      headers: { 'content-type': 'application/json', cookie: cookieA },
+      payload: { payload: { data: { sections: [{ id: 's1', title: '改过' }] }, name: 'W' } },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().payload.data.sections[0].title).toBe('改过');
+
+    const after = await app.inject({ method: 'GET', url: `/api/resumes/${rid}/versions`, headers: { cookie: cookieA } });
+    const versions = after.json() as Array<{ kind: string; snapshot: any }>;
+    expect(versions.length).toBeGreaterThanOrEqual(1);
+    const auto = versions.find((v) => v.kind === 'auto');
+    expect(auto).toBeTruthy();
+    expect(auto!.snapshot.data.sections[0].title).toBe('改过');
+  });
+
   it('别人的版本 / 别人的简历 → 404（不泄露存在性）', async () => {
     const listA = await app.inject({ method: 'GET', url: `/api/resumes/${resumeIdA}/versions`, headers: { cookie: cookieA } });
     const versionId = listA.json()[0].id;

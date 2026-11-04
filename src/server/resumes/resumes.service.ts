@@ -5,6 +5,10 @@ import { TenantDb, type ResumeInput, type ResumePatch } from '../tenant/tenant-d
 const KINDS = ['master', 'derived', 'blank'] as const;
 const PATCH_KEYS = ['title', 'payload', 'tags', 'kind', 'parentId', 'jobId', 'jdText'] as const;
 
+/** 自动留痕节流：同一简历 2 分钟内最多写 1 条 auto 版本，避免连续自动保存刷屏。 */
+const AUTO_VERSION_THROTTLE_MS = 2 * 60 * 1000;
+const lastAutoAt = new Map<string, number>();
+
 @Injectable()
 export class ResumesService {
   constructor(@Inject(TenantDb) private readonly tenant: TenantDb) {}
@@ -38,7 +42,33 @@ export class ResumesService {
     }
     const rows = await this.tenant.forUser(userId).updateResume(id, allowed);
     if (!rows.length) throw new NotFoundException('简历不存在');
-    return rows[0];
+    const updated = rows[0];
+    // P0-3：正文改动自动留痕（kind=auto），支撑「编辑自动留痕」卖点；
+    // 失败静默降级，绝不连累保存主流程。
+    if (allowed.payload !== undefined) {
+      this.autoSnapshot(userId, id, updated.payload as Record<string, unknown>).catch(() => undefined);
+    }
+    return updated;
+  }
+
+  /** 正文变更自动写一条 auto 版本：节流 + 与最近 auto 版本去重，避免连续保存产生大量版本。 */
+  private async autoSnapshot(userId: string, id: string, payload: Record<string, unknown>) {
+    const key = userId + ':' + id;
+    const now = Date.now();
+    if (now - (lastAutoAt.get(key) || 0) < AUTO_VERSION_THROTTLE_MS) return;
+    const versions = await this.tenant.forUser(userId).listVersions(id);
+    const lastAuto = versions.find((v) => v.kind === 'auto');
+    if (lastAuto && JSON.stringify(lastAuto.snapshot) === JSON.stringify(payload)) {
+      lastAutoAt.set(key, now); // 内容没变也刷新节流，避免高频轮询
+      return;
+    }
+    lastAutoAt.set(key, now);
+    await this.tenant.forUser(userId).addVersion({
+      resumeId: id,
+      kind: 'auto',
+      label: null,
+      snapshot: payload,
+    });
   }
 
   /** 删除简历时一并清掉它的版本快照，避免留下悬空历史。 */

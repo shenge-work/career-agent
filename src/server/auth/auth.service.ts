@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DB_TOKEN, type CurrentUser, type Role } from '../../shared/constants';
 import type { Database } from '../db/client';
@@ -57,5 +57,43 @@ export class AuthService {
 
   async logout(tokenHash: string): Promise<void> {
     await this.sessions.revoke(tokenHash);
+  }
+
+  /**
+   * 开发阶段免登录：跳过密码校验，直接以库内账号（优先 DEV_USER_EMAIL，
+   * 否则首个 admin，再否则首个用户）建立会话。仅当 DEV_SKIP_AUTH=true
+   * 时可用，生产构建（start）不设置该变量，接口恒返回 401，保持隔离铁律。
+   * 仍会写入真实 user_id，因此下游 TenantDb.forUser 照常生效。
+   */
+  async devLogin(): Promise<LoginResult> {
+    if (process.env.DEV_SKIP_AUTH !== 'true') {
+      throw new UnauthorizedException('开发免登录未启用');
+    }
+    const targetEmail = (process.env.DEV_USER_EMAIL || '').trim().toLowerCase();
+    let row:
+      | (typeof users.$inferSelect)
+      | undefined;
+    if (targetEmail) {
+      const r = await this.db.select().from(users).where(eq(users.email, targetEmail)).limit(1);
+      row = r[0];
+    } else {
+      const admins = await this.db.select().from(users).where(eq(users.role, 'admin')).limit(1);
+      row = admins[0] || (await this.db.select().from(users).limit(1))[0];
+    }
+    if (!row || row.status !== 'active') {
+      throw new BadRequestException('开发免登录失败：库内没有可用账号，请先 npm run seed:user');
+    }
+
+    const token = newSessionToken();
+    await this.sessions.create(row.id, hashToken(token), { userAgent: 'dev-bypass', ip: '' });
+    await this.sessions.touchLogin(row.id);
+
+    const user: CurrentUser = {
+      id: row.id,
+      email: row.email,
+      displayName: row.displayName,
+      role: row.role as Role,
+    };
+    return { user, token };
   }
 }

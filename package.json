@@ -6,7 +6,7 @@
   "description": "CareerAgent - 个人求职 Agent 工作台（本地服务器 + 账号行级隔离）",
   "scripts": {
     "dev": "concurrently -k -n server,web -c gray,white \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "ts-node -r tsconfig-paths/register src/server/main.ts",
+    "dev:server": "DEV_SKIP_AUTH=true ts-node -r tsconfig-paths/register src/server/main.ts",
     "dev:web": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc -p tsconfig.json && vite build",
     "start": "node dist-server/server/main.js",

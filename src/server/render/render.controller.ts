@@ -109,8 +109,12 @@ export class RenderController {
 
     reply.header('Cache-Control', 'no-store');
     reply.header('X-Content-Type-Options', 'nosniff');
-    const enc = (n: string) =>
-      "attachment; filename=\"" + n + "\"; filename*=UTF-8''" + encodeURIComponent(n);
+    // RFC 5987：filename 只允许 ASCII，UTF-8 文件名必须走 filename*。
+    // 直接把中文写进 filename="..." 会被 Fastify 以 ERR_INVALID_CHAR 拒绝（文本类导出 500）。
+    const enc = (n: string) => {
+      const ascii = n.replace(/[^\x21-\x7e]/g, '_');
+      return "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encodeURIComponent(n);
+    };
 
     switch (format) {
       case 'md':

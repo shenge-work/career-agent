@@ -311,3 +311,33 @@ describe('P0 · 本地回环安全守卫', () => {
     ).toBe(false);
   });
 });
+
+describe('P0 · 开发免登录（DEV_SKIP_AUTH，仅开发期）', () => {
+  it('DEV_SKIP_AUTH=true 时免密码登录并拿到有效会话', async () => {
+    const prev = process.env.DEV_SKIP_AUTH;
+    process.env.DEV_SKIP_AUTH = 'true';
+    try {
+      const res = await app.inject({ method: 'POST', url: '/api/auth/dev-login' });
+      expect(res.statusCode).toBe(200);
+      const cookie = cookieOf(res);
+      expect(cookie).toContain('rs_sid=');
+      const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+      expect(me.statusCode).toBe(200);
+      expect(me.json().user.email).toBe(ADMIN.email);
+    } finally {
+      if (prev === undefined) delete process.env.DEV_SKIP_AUTH;
+      else process.env.DEV_SKIP_AUTH = prev;
+    }
+  });
+
+  it('默认（未设置）时 dev-login 返回 401，不破坏生产隔离', async () => {
+    const prev = process.env.DEV_SKIP_AUTH;
+    delete process.env.DEV_SKIP_AUTH;
+    try {
+      const res = await app.inject({ method: 'POST', url: '/api/auth/dev-login' });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      if (prev !== undefined) process.env.DEV_SKIP_AUTH = prev;
+    }
+  });
+});

@@ -6,6 +6,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const dev = (import.meta as any).env?.DEV === true;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -16,6 +17,19 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+      onSuccess();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function devSubmit() {
+    setError('');
+    setBusy(true);
+    try {
+      await api('/auth/dev-login', { method: 'POST' });
       onSuccess();
     } catch (err) {
       setError((err as Error).message);
@@ -67,6 +81,12 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
             <button type="submit" className="login-submit" disabled={busy}>
               {busy ? '登录中…' : '登录'}
             </button>
+
+            {dev && (
+              <button type="button" className="login-submit login-dev" onClick={devSubmit} disabled={busy}>
+                开发模式 · 一键登录（免密码）
+              </button>
+            )}
           </form>
 
           <p className="login-terms">
