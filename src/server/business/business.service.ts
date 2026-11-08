@@ -189,6 +189,18 @@ export class BusinessService {
     return rows[0];
   }
 
+  /** 就地更新 JD 载荷（补录发布时间/职责/技能等），不换 id，避免打断 applications.jdId 关联。 */
+  async updateCompanyJd(userId: string, companyId: string, jdId: string, input: { payload?: unknown }) {
+    await this.requireCompany(userId, companyId);
+    const rows = await this.t(userId).getCompanyJd(jdId);
+    if (!rows.length || rows[0].companyId !== companyId) throw new NotFoundException('岗位不存在');
+    const prev = obj(rows[0].payload);
+    const payload = { ...prev, ...obj(input.payload), id: jdId, companyId };
+    const updated = await this.t(userId).updateCompanyJd(jdId, payload);
+    if (!updated.length) throw new NotFoundException('岗位不存在');
+    return updated[0];
+  }
+
   async deleteCompanyJd(userId: string, companyId: string, jdId: string) {
     await this.requireCompany(userId, companyId);
     const rows = await this.t(userId).getCompanyJd(jdId);

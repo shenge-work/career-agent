@@ -68,6 +68,12 @@ export interface Referral {
   jobUrl: string;
   referralCode: string;
   status: ReferralStatus;
+  /** 采集来源的原帖地址（脉脉 feed-detail 直链）。 */
+  sourceUrl: string;
+  /** 来源渠道标识：manual / 脉脉 … */
+  source: string;
+  /** 采集时间（原帖发布时间）。 */
+  publishedAt: string;
   /** 实际投递/内推日期（YYYY-MM-DD）。 */
   appliedAt: string;
   /** 下次跟进日期（YYYY-MM-DD）。 */
@@ -97,6 +103,9 @@ export function normalizeReferral(payload: Record<string, any> | null | undefine
     jobUrl: str(p.jobUrl),
     referralCode: str(p.referralCode),
     status: (REFERRAL_STATUS_MAP[status] ? (status as ReferralStatus) : 'pending'),
+    sourceUrl: str(p.sourceUrl),
+    source: str(p.source),
+    publishedAt: str(p.publishedAt),
     appliedAt: str(p.appliedAt),
     followUpAt: str(p.followUpAt),
     validUntil: str(p.validUntil),

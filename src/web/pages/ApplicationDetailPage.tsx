@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
@@ -110,13 +110,17 @@ export default function ApplicationDetailPage() {
   const company = app?.companyId ? companies.find((c) => c.id === app.companyId) : null;
   const resume = app?.resumeId ? resumes.find((r) => r.id === app.resumeId) : null;
 
-  // 初始化 JD 文本
-  useState(() => {
-    if (app) {
-      setJdText((app.payload?.jdText as string) || '');
-      setJdSaved(true);
-    }
-  });
+  // 初始化 JD 文本：必须等 app 异步到达后再回填。
+  // （曾用 useState(() => ...) 误当副作用，惰性初始化只在首帧跑一次，app 永远是 undefined，
+  //  导致「已录入 JD」的岗位打开详情页却显示「暂无 JD」。）
+  useEffect(() => {
+    if (!app) return;
+    setJdText((app.payload?.jdText as string) || '');
+    setJdSaved(true);
+    setJdEditing(false);
+    // 仅在切换岗位时重置；保存后 app 对象会刷新，但 id 不变，不能覆盖用户正在编辑的内容。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.id]);
 
   const { data: events = [] } = useQuery({
     queryKey: ['application-events', id],
@@ -233,6 +237,8 @@ export default function ApplicationDetailPage() {
 
   const salary = (app.payload?.salary as string) || '';
   const location = (app.payload?.location as string) || '';
+  // 岗位发布时间：招聘页上抓到的原始发布日期（xTool 内推页不展示，故可能为空）。
+  const publishDate = (app.payload?.publishDate as string) || '';
 
   return (
     <div className="detail-page">
@@ -263,6 +269,7 @@ export default function ApplicationDetailPage() {
           {company && <span className="meta-chip">{company.name}</span>}
           {salary && <span className="meta-chip salary">{salary}</span>}
           {location && <span className="meta-chip">{location}</span>}
+          {publishDate && <span className="meta-chip">发布于 {publishDate}</span>}
         </div>
         <div className="detail-meta-grid">
           <div>

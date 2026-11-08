@@ -427,6 +427,11 @@ export default function CompanyDetailPage() {
                         岗位链接 ↗
                       </a>
                     )}
+                    {r.sourceUrl && (
+                      <a className="mini" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">
+                        原帖 ↗
+                      </a>
+                    )}
                     {r.referralCode && <span className="tag">内推码 {r.referralCode}</span>}
                     <button
                       className="mini danger"
@@ -554,6 +559,7 @@ export default function CompanyDetailPage() {
                 <strong>{j.payload?.title || '未命名岗位'}</strong>
                 <span className="muted small">
                   {' '}· {j.payload?.salary || '—'} · {j.payload?.city || '—'}
+                  {j.payload?.publishDate ? ` · 发布于 ${j.payload.publishDate}` : ''}
                 </span>
                 <div className="btn-row">
                   <button className="mini danger" onClick={() => deleteJdM.mutate(j.id)}>删除</button>

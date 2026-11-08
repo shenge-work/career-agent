@@ -22,6 +22,16 @@ export class CompaniesController {
     return this.biz.createCompanyJd(user.id, id, { payload: body?.payload ?? body });
   }
 
+  @Put(':id/jds/:jdId')
+  updateJd(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Param('jdId') jdId: string,
+    @Body() body: any
+  ) {
+    return this.biz.updateCompanyJd(user.id, id, jdId, { payload: body?.payload ?? body });
+  }
+
   @Delete(':id/jds/:jdId')
   deleteJd(
     @CurrentUser() user: CurrentUserType,

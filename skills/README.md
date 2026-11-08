@@ -62,6 +62,41 @@ portfolio-website-generator/
 - favicon 脚本：Python 3 + Pillow（`pip3 install pillow`）
 - 验证：Playwright 无头浏览器（可选，用于控制台零报错和响应式验证）
 
+### job-apply-automation — 简历自动投递
+
+读取候选人简历，自动在招聘官网（快手/BOSS 直聘/拉勾等）筛选岗位、上传简历、逐字段填写申请表单，完成投递（最终提交需用户确认）。
+
+- **输入**：简历文件（PDF/Word/Markdown 或资料库 drive 节点链接）+ 目标官网/岗位链接
+- **输出**：在目标官网完成申请表单的自动填写，投递动作由用户确认后执行
+- **核心价值**：把「解析简历 → 打开官网 → 上传简历 → 填表单 → 投递」固化为可复用 SOP
+- **安全红线**：真实「投递」按钮必须用户确认后才点击；只排版不编造简历内容
+
+#### 目录结构
+
+```
+job-apply-automation/
+├── SKILL.md                              # 技能定义与 5 步工作流程
+├── references/
+│   ├── resume-field-mapping.md           # 简历字段 → 申请表单字段映射（含快手实测字段名）
+│   └── browser-playbook.md               # 浏览器自动化实战要点与踩坑记录
+└── scripts/
+    └── （预留）简历解析辅助脚本
+```
+
+#### 使用方式
+
+其他 Agent 使用本技能时：
+
+1. **阅读 `SKILL.md`** 了解 5 步工作流程
+2. **阅读 `references/resume-field-mapping.md`** 了解字段映射与系统自动解析规律
+3. **阅读 `references/browser-playbook.md`** 掌握 DOM/滚动/日期选择等实战踩坑
+4. 投递动作前**必须**用 AskUserQuestion 让用户确认
+
+#### 依赖
+
+- 浏览器自动化：WorkBuddy 内置浏览器或已装扩展的 Chrome
+- 简历解析：workbuddy-pdf（PDF）、library 技能（资料库节点）
+
 ## 新增技能
 
 如需在本项目中新增其他技能，按同样结构创建子目录：

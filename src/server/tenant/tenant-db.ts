@@ -360,6 +360,14 @@ export class TenantDb {
       createCompanyJd: (input: { id: string; companyId: string; payload: Record<string, unknown> }) =>
         revive(companyJds, { id: input.id, userId, companyId: input.companyId, payload: input.payload }),
 
+      updateCompanyJd: (id: string, payload: Record<string, unknown>) =>
+        db
+          .update(companyJds)
+          // company_jds 没有 updated_at 列（只增不删的轻量记录），改动靠触发器维护 hlc。
+          .set({ payload })
+          .where(active(companyJds, eq(companyJds.id, id)))
+          .returning(),
+
       deleteCompanyJd: (id: string) => softDelete(companyJds, companyJds.id, id),
 
       deleteCompanyJdsForCompany: (companyId: string) =>

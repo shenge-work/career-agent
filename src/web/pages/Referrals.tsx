@@ -309,7 +309,10 @@ export default function Referrals() {
                 <div
                   key={row.id}
                   className={'ref-card' + (selectedId === row.id ? ' selected' : '')}
-                  onClick={() => startEdit(row, ref)}
+                  onClick={() => {
+                    setSelectedId(row.id);
+                    setEditing(false);
+                  }}
                 >
                   <div className="ref-card-head">
                     <strong className="ref-card-title">{referralTitle(ref)}</strong>
@@ -321,12 +324,17 @@ export default function Referrals() {
                     {ref.city && <span>{ref.city}</span>}
                     {ref.salary && <span className="li-salary">{ref.salary}</span>}
                   </div>
-                  {(ref.referralCode || ref.jobUrl) && (
+                  {(ref.referralCode || ref.jobUrl || ref.sourceUrl) && (
                     <div className="ref-card-links" onClick={(e) => e.stopPropagation()}>
                       {ref.referralCode && <span className="tag">内推码 {ref.referralCode}</span>}
                       {ref.jobUrl && (
                         <a href={ref.jobUrl} target="_blank" rel="noopener noreferrer">
                           岗位链接 ↗
+                        </a>
+                      )}
+                      {ref.sourceUrl && (
+                        <a href={ref.sourceUrl} target="_blank" rel="noopener noreferrer">
+                          {ref.source === '脉脉' ? '脉脉原帖 ↗' : '原帖 ↗'}
                         </a>
                       )}
                     </div>
@@ -555,6 +563,11 @@ export default function Referrals() {
                 <span>{selected.ref.city || '—'}</span>
                 <span>内推码</span>
                 <span>{selected.ref.referralCode || '—'}</span>
+                <span>来源</span>
+                <span>
+                  {selected.ref.source || '手工录入'}
+                  {selected.ref.publishedAt ? ` · 原帖 ${selected.ref.publishedAt}` : ''}
+                </span>
                 <span>内推日期</span>
                 <span>{selected.ref.appliedAt || '—'}</span>
                 <span>下次跟进</span>
@@ -562,11 +575,16 @@ export default function Referrals() {
                 <span>更新</span>
                 <span>{fmtTime(selected.row.updatedAt)}</span>
               </div>
-              {(selected.ref.jobUrl || selected.ref.referralCode) && (
+              {(selected.ref.jobUrl || selected.ref.sourceUrl) && (
                 <div className="btn-row">
                   {selected.ref.jobUrl && (
                     <a className="mini" href={selected.ref.jobUrl} target="_blank" rel="noopener noreferrer">
                       打开岗位链接 ↗
+                    </a>
+                  )}
+                  {selected.ref.sourceUrl && (
+                    <a className="mini" href={selected.ref.sourceUrl} target="_blank" rel="noopener noreferrer">
+                      打开原帖 ↗
                     </a>
                   )}
                 </div>
