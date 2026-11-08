@@ -12,12 +12,14 @@ import ApplicationDetailPage from './pages/ApplicationDetailPage';
 import Portfolio from './pages/Portfolio';
 import Companies from './pages/Companies';
 import CompanyDetailPage from './pages/CompanyDetailPage';
+import Referrals from './pages/Referrals';
 import TrackerPage from './pages/Tracker';
 import TrackerDetailPage from './pages/TrackerDetailPage';
 import Account from './pages/Account';
 import AiPlayground from './pages/AiPlayground';
 import Attachments from './pages/Attachments';
 import Conflicts from './pages/Conflicts';
+import Sync from './pages/Sync';
 import Kb from './pages/Kb';
 import Editor from './pages/Editor';
 
@@ -77,9 +79,11 @@ export default function App() {
           <Route path="/resumes" element={<Library />} />
           <Route path="/attachments" element={<Attachments />} />
           <Route path="/conflicts" element={<Conflicts />} />
+          <Route path="/sync" element={<Sync />} />
           <Route path="/editor/:id" element={<Editor />} />
           <Route path="/companies" element={<Companies />} />
           <Route path="/companies/:id" element={<CompanyDetailPage />} />
+          <Route path="/referrals" element={<Referrals />} />
           <Route path="/tracker" element={<TrackerPage />} />
           <Route path="/tracker/:id" element={<TrackerDetailPage />} />
           <Route path="/account" element={<Account user={data.user} />} />

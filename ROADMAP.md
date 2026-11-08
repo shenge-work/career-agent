@@ -62,8 +62,32 @@
   `schema.sql` / `wrangler.toml`）与 `src/server/sync/cloudflare-transport.ts`。云端只做授权 /
   分配 seq / 存密文：D1 三张表、`events` 主键承担 CAS 并发回滚，R2 存已加密 blob；
   客户端 `createVault / joinVault / attach` 与离线包实现同一个 `SyncTransport`。
-  恢复码自包含公开 salt，另一台设备只抄一串码即可加入。两套端到端测试（内存 Store 与
-  D1/R2 替身）零账号零网络验证全链路；Cloudflare 账号下的部署联调仍待执行。
+  恢复码自包含公开 salt，另一台设备只抄一串码即可加入。  两套端到端测试（内存 Store 与
+  D1/R2 替身）零账号零网络验证全链路。
+- 🚧 **真实账号部署联调（2026-11-08 进行中）**：D1 `career-agent-sync` 已建表、Worker 已部署到
+  `career-agent-sync.shenge-work.workers.dev`、本机 wrangler 已授权；在真实 Workers 运行时用
+  `scripts/sync-smoke.ts` 跑通 health / 建 vault / E2EE 推拉 / CAS / 跨设备加入。阻塞项：
+  ① R2 订阅仍停在 Dashboard 结账页（需用户手动提交账单与卡信息），当前线上为去掉 R2 绑定的
+  「事件通道版」；② `*.workers.dev` 在当前网络代理 502 / 直连超时，公网联调需绑定自定义域名或换网络；
+  ③ `wrangler dev` 远程 D1 绑定报 Cloudflare internal error（同一 SQL 经 `d1 execute --remote` 正常），
+  判定为 Wrangler 远程绑定链路问题。详见 README「真实账号部署进展」。
+  **2026-11-09 用户决定此链路冻结待定**，先接境内可用通道，代码与部署配置全部保留。
+- ✅ **腾讯云 CloudBase 通道（2026-11-09 已接入，未部署）**：用户拍板「Cloudflare 先待定，
+  先接腾讯 CloudBase 用着先」，并选择只做代码 + 本地模拟（不创建云资源、不产生费用）。
+  `cloud/sync-cloudbase/`：`gateway.ts` 做 HTTP 访问服务事件 ↔ `Request/Response`，
+  `app.ts` 复用同一份 Worker handler，`cloudbase-store.ts` 用 `runTransaction` 快照隔离实现
+  CAS（云数据库存密文事件 + 云存储存密文 blob），`index.ts` 收敛 node-sdk 版本差异；
+  `src/server/sync/remote-transport.ts` 抽出厂商无关协议逻辑，
+  `CloudflareTransport` 静态 API 零回归，新增 `CloudBaseTransport`（`pathPrefix` / 环境变量入口）。
+  `scripts/sync-smoke.ts` 支持 `SYNC_TRANSPORT` 切换两端点。16 例零账号端到端测试 + 全套
+  287 通过 / 3 跳过；主 tsc、Worker / CloudBase 源码独立 tsc、esbuild 云函数打包、`npm run build` 均通过。
+  下一步需真实账号：建四个集合、部署云函数、核对 SDK 适配层与配额。
+- ✅ **云同步全线落地（2026-11-09）**：`0013_sync_state`（per-user 同步状态表）+ `0014_stale_echo_guard`
+  （堵「陈旧回声」回退洞）+ `sync/engine.ts`（pull→push→GC 三阶段独立游标、基线全量首传、增量
+  change_log、CAS 重试、附件 blob 先传后推、双端 GC）+ `sync/sync-cloud.service.ts` + controller
+  （status/setup/disable/sync/recovery）+ transport 全链路 `deleteBlob` + 前端 `#/sync` +
+  `test/sync-engine.e2e.test.ts`(7 例)；`referrals` 纳入 10 张同步表。真实服务器 `106.55.30.22`
+  已部署上线（自签名 TLS，公网 smoke 全过）。完整方案见 `docs/技术设计方案/云同步技术设计方案.md`。
 - 📋 **P5 切真 PostgreSQL**：`drizzle-orm/pglite` → `node-postgres`，迁移 SQL 方言一致可直接复用；
   先补对照测试（步骤见 v2 重构归档 04 §5）。
 - 📋 **STAR 经历素材库**：跨简历复用的经历片段（v1 `snippet-library.js` 移植，落 PG 表）。
@@ -84,8 +108,12 @@
   离线增量包适配器（无需任何云账号即可验证全链路）。  **已拍板 Cloudflare Workers + D1 + R2 +
   恢复码 E2EE**；境内合规备选腾讯云 CloudBase / COS，自建 NestJS 留给将来多用户 SaaS，Supabase 否决。
   云端四端点 / D1 schema / wrangler 配置与客户端 `CloudflareTransport` 已落地并经零账号端到端验证。
-  剩余仅：Sync Engine 本体（全量首传 / 增量推拉 / 断点续传 / 回灌调度 / `sync_state` 表）、
-  前端 `#/sync`、blob 云端引用计数 GC、真实账号部署联调。详见 README 云端选型章节。
+  2026-11-09 追加腾讯云 CloudBase 作为境内可用通道（同一 `/v1` 协议，只换运行时与存储），
+  Cloudflare 链路暂时冻结待定。**Sync Engine 本体（全量首传 / 增量推拉 / 断点续传 /
+  回灌调度 / `sync_state` 表）、前端 `#/sync`、blob 云端引用计数 GC 均已于 2026-11-09 落地，
+  并完成腾讯云轻量服务器 `106.55.30.22` 真实部署上线（自签名 TLS，公网 smoke 全过）**。
+  剩余非阻塞项：`#/sync` 桌面端手测、两台真实设备恢复码加入实测（等安装包发布）、
+  服务器 2026-12-08 到期续费。完整方案见 `docs/技术设计方案/云同步技术设计方案.md`。
 
 ## ❌ 已否决 / 随 v1 退役
 

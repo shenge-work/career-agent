@@ -16,6 +16,7 @@
  *   PUT  /v1/vaults/:id/blobs/:objectKey           上传密文 blob
  *   GET  /v1/vaults/:id/blobs/:objectKey           下载密文 blob
  *   HEAD /v1/vaults/:id/blobs/:objectKey            探测是否存在
+ *   DELETE /v1/vaults/:id/blobs/:objectKey          删除 blob（客户端 GC 用，幂等）
  *   GET  /v1/health                                部署自检
  *
  * 请求头：X-CA-Auth = authKey 的 64 位 hex；X-CA-Device = 设备 ID。
@@ -311,6 +312,10 @@ async function handleVaultRoute(
         status: (await env.store.hasBlob(vaultId, objectKey)) ? 200 : 404,
         headers: noStoreHeaders(),
       });
+    }
+    if (request.method === 'DELETE') {
+      await env.store.deleteBlob(vaultId, objectKey);
+      return new Response(null, { status: 204, headers: noStoreHeaders() });
     }
   }
 

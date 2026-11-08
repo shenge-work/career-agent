@@ -151,6 +151,38 @@ export const companyJds = pgTable(
   ]
 );
 
+/**
+ * 内推信息（Referral）—— 统一的内推资源池。
+ *
+ * 一条 referral = 一次可用的内推机会：谁内推（referrer）、哪家公司（companyId）、
+ * 哪个岗位（payload.position）、走什么渠道（payload.channel）、当前进展（payload.status）、
+ * 下一步什么时候跟进（payload.followUpAt）。
+ *
+ * company_id 与 company_jds 一样不加外键：companies 的主键是 (user_id, id) 复合键，
+ * 且公司被删时内推信息是独立资产（内推人还在、岗位链接还有效），只做软删除级联。
+ * 细节字段全部落 payload，避免为内推规则频繁改 schema。
+ */
+export const referrals = pgTable(
+  'referrals',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 关联公司档案；可为空（还没建档，或内推人本身挂着多个岗位）。 */
+    companyId: text('company_id'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('referrals_user_idx').on(t.userId),
+    index('referrals_user_company_idx').on(t.userId, t.companyId),
+  ]
+);
+
 export const tracker = pgTable(
   'tracker',
   {
@@ -546,6 +578,39 @@ export const aiUsage = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] })]
 );
 
+/**
+ * 0013 · 同步状态（local-first 的本地游标与 E2EE 密钥柜）。
+ *
+ * 云端是哑管道、只认 seq；本地必须自己记三样东西：
+ *   · pushedCursor —— change_log.hlc 拉取游标，'' = 尚未做过基线全量首传；
+ *   · pulledSeq     —— 云端已消费的 seq，断点续传只认它；
+ *   · keysJson      —— 派生的 E2EE 密钥（base64）只存本机，恢复码本身不落库。
+ * 同机重启后靠 keysJson 直接恢复密钥；另一台设备加入仍需手抄恢复码（scrypt 单向，无法反推）。
+ * knownBlobs 是「已知云端 blob key」集合，供云端 GC 比对引用集（内容寻址，只增不删）。
+ */
+export const syncState = pgTable('sync_state', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  vaultId: text('vault_id').notNull(),
+  deviceId: text('device_id').notNull(),
+  /** 本地增量拉取游标（change_log.hlc）；空串 = 需做基线全量首传。 */
+  pushedCursor: text('pushed_cursor').notNull().default(''),
+  /** 云端已消费 seq；断点续传游标，不参与冲突判定。 */
+  pulledSeq: text('pulled_seq').notNull().default('00000000000000000000'),
+  /** E2EE 派生密钥（base64），仅存本机；{ vaultId, salt, authKey, encKey, macKey }。 */
+  keysJson: jsonb('keys_json').$type<Record<string, string>>().notNull(),
+  /** idle | syncing | error | disabled。 */
+  status: text('status', { enum: ['idle', 'syncing', 'error', 'disabled'] })
+    .notNull()
+    .default('idle'),
+  lastError: text('last_error'),
+  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+  /** 已知云端 blob key（内容寻址），云端 GC 比对引用集时用。 */
+  knownBlobs: jsonb('known_blobs').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  updatedAt: updatedAt(),
+});
+
 export const schema = {
   users,
   sessions,
@@ -553,6 +618,7 @@ export const schema = {
   versions,
   companies,
   companyJds,
+  referrals,
   tracker,
   applications,
   applicationEvents,
@@ -567,10 +633,13 @@ export const schema = {
   settings,
   aiConfigs,
   aiUsage,
+  syncState,
 };
 
 export type UserRow = typeof users.$inferSelect;
 export type ResumeRow = typeof resumes.$inferSelect;
+export type CompanyRow = typeof companies.$inferSelect;
+export type ReferralRow = typeof referrals.$inferSelect;
 export type ApplicationRow = typeof applications.$inferSelect;
 export type PortfolioRow = typeof portfolios.$inferSelect;
 export type InterviewNoteRow = typeof interviewNotes.$inferSelect;

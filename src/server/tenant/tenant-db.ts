@@ -15,6 +15,7 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  referrals,
   resumes,
   settings,
   tracker,
@@ -149,6 +150,16 @@ export interface InterviewKbInput {
 /** 面经知识库允许更新的字段白名单。 */
 export type InterviewKbPatch = Partial<Pick<InterviewKbInput, 'title' | 'category' | 'tags' | 'content'>>;
 
+/** 内推信息输入：公司 + 自由载荷（内推人 / 岗位 / 渠道 / 状态 / 链接 / 跟进日期）。 */
+export interface ReferralInput {
+  id: string;
+  companyId?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+/** 内推信息允许更新的字段白名单。 */
+export type ReferralPatch = Partial<Pick<ReferralInput, 'companyId' | 'payload'>>;
+
 /**
  * 行级隔离的唯一入口。
  *
@@ -157,7 +168,7 @@ export type InterviewKbPatch = Partial<Pick<InterviewKbInput, 'title' | 'categor
  * 因此「忘了加 where user_id」在结构上就不可能发生。
  * 需要跨用户视图时（管理员），必须走单独的 UsersService 并经 RolesGuard('admin')。
  *
- * 0011 起，8 张可变实体表一律：读走 active()（自动过滤软删除墓碑）、
+ * 0011 起，9 张可变实体表一律：读走 active()（自动过滤软删除墓碑）、
  * 删走 softDelete()（UPDATE 设 deleted_at）、创建走 revive()（支持同 id 复活）。
  * hlc / device_id 由数据库 BEFORE 触发器统一填，应用层绝不自己写时钟。
  * versions / application_events / settings / ai_configs 是「只增不删」的流水与单例，
@@ -353,6 +364,44 @@ export class TenantDb {
 
       deleteCompanyJdsForCompany: (companyId: string) =>
         softDeleteWhere(companyJds, companyJds.id, eq(companyJds.companyId, companyId)),
+
+      // -------------------------------------------------------- 内推信息
+      listReferrals: () =>
+        db.select().from(referrals).where(active(referrals)).orderBy(desc(referrals.updatedAt)),
+
+      listReferralsForCompany: (companyId: string) =>
+        db
+          .select()
+          .from(referrals)
+          .where(active(referrals, eq(referrals.companyId, companyId)))
+          .orderBy(desc(referrals.updatedAt)),
+
+      getReferral: (id: string) =>
+        db
+          .select()
+          .from(referrals)
+          .where(active(referrals, eq(referrals.id, id)))
+          .limit(1),
+
+      createReferral: (input: { id: string; companyId: string | null; payload: Record<string, unknown> }) =>
+        revive(referrals, {
+          id: input.id,
+          userId,
+          companyId: input.companyId,
+          payload: input.payload,
+        }),
+
+      updateReferral: (id: string, patch: ReferralPatch) =>
+        db
+          .update(referrals)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(referrals, eq(referrals.id, id)))
+          .returning(),
+
+      deleteReferral: (id: string) => softDelete(referrals, referrals.id, id),
+
+      deleteReferralsForCompany: (companyId: string) =>
+        softDeleteWhere(referrals, referrals.id, eq(referrals.companyId, companyId)),
 
       // -------------------------------------------------------- 投递管理
       listTracker: () =>

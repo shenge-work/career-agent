@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, fmtTime, post, type CompanyItem } from '../api';
+import { api, fmtTime, post, type CompanyItem, type ReferralItem } from '../api';
 import {
   dimensionCoverage,
   expandIndustryQuery,
@@ -28,6 +28,20 @@ export default function Companies() {
     queryKey: ['companies'],
     queryFn: () => api<CompanyItem[]>('/companies'),
   });
+
+  // 内推信息按公司聚合，卡片上直接给出「这家公司有几条内推资源」。
+  const { data: referrals = [] } = useQuery({
+    queryKey: ['referrals'],
+    queryFn: () => api<ReferralItem[]>('/referrals'),
+  });
+  const referralCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of referrals) {
+      if (!r.companyId) continue;
+      m.set(r.companyId, (m.get(r.companyId) || 0) + 1);
+    }
+    return m;
+  }, [referrals]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['companies'] });
   const onFail = (e: unknown) => setError((e as Error).message);
@@ -103,6 +117,7 @@ export default function Companies() {
         <span className="chip">公司档案 {stats.total}</span>
         <span className="chip">调研条目 {stats.research}</span>
         <span className="chip">平均完整度 {stats.avg}%</span>
+        <span className="chip">内推信息 {referrals.length}</span>
       </div>
 
       <div className="co-toolbar">
@@ -173,7 +188,8 @@ export default function Companies() {
                       <span key={d} className={cov.covered.includes(d) ? 'on' : 'off'} />
                     ))}
                     <em className="muted small">
-                      {cov.covered.length}/6 · 调研 {ic.research?.length || 0} · JD {ic.jds?.length || 0}
+                      {cov.covered.length}/6 · 调研 {ic.research?.length || 0} · JD {ic.jds?.length || 0} · 内推{' '}
+                      {referralCount.get(c.id) || 0}
                     </em>
                   </div>
                   <div className="muted small">更新 {fmtTime(c.updatedAt)}</div>

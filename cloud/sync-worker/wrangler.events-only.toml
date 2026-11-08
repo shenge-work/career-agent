@@ -9,8 +9,6 @@ account_id = "ead07d9f00f8e2ac69055a81cc198382"
 binding = "DB"
 database_name = "career-agent-sync"
 database_id = "9970f317-1b20-4d47-be5c-137b69e6216d"
-# 本地 Worker 运行时 + 真实远程 D1（wrangler dev 的 remote bindings）
-remote = true
 
 [vars]
 SYNC_PROTOCOL_VERSION = "1"

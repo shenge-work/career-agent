@@ -7,6 +7,7 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  referrals,
   resumes,
   tracker,
 } from '../db/schema';
@@ -27,11 +28,12 @@ import {
  * 只是把「远端一行变更如何安全落进本地」这条最难的路径先固化并可测试。
  */
 
-/** 8 张可变实体表；流水/快照/单例配置表有各自的写入路径，不走远端 upsert。 */
+/** 9 张可变实体表；流水/快照/单例配置表有各自的写入路径，不走远端 upsert。 */
 export const SYNC_TABLES = {
   resumes,
   companies,
   companyJds,
+  referrals,
   tracker,
   applications,
   portfolios,

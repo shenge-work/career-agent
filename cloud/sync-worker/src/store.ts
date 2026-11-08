@@ -49,6 +49,8 @@ export interface SyncStore {
   putBlob(vaultId: string, objectKey: string, bytes: Uint8Array): Promise<void>;
   getBlob(vaultId: string, objectKey: string): Promise<Uint8Array | null>;
   hasBlob(vaultId: string, objectKey: string): Promise<boolean>;
+  /** 删除 blob；内容寻址，幂等；客户端比对引用集后调用，云端不感知引用关系。 */
+  deleteBlob(vaultId: string, objectKey: string): Promise<void>;
 }
 
 function blobPath(vaultId: string, objectKey: string): string {
@@ -124,6 +126,10 @@ export class MemorySyncStore implements SyncStore {
   async hasBlob(vaultId: string, objectKey: string): Promise<boolean> {
     return this.blobs.has(blobPath(vaultId, objectKey));
   }
+
+  async deleteBlob(vaultId: string, objectKey: string): Promise<void> {
+    this.blobs.delete(blobPath(vaultId, objectKey));
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -143,6 +149,7 @@ export interface R2Like {
   put(key: string, value: ArrayBuffer | Uint8Array | ReadableStream): Promise<unknown>;
   get(key: string): Promise<{ body: ReadableStream; size: number } | null>;
   head(key: string): Promise<{ size: number } | null>;
+  delete(key: string): Promise<unknown>;
 }
 
 interface EventRow {
@@ -274,6 +281,10 @@ export class D1R2Store implements SyncStore {
 
   async hasBlob(vaultId: string, objectKey: string): Promise<boolean> {
     return !!(await this.bucket.head(blobPath(vaultId, objectKey)));
+  }
+
+  async deleteBlob(vaultId: string, objectKey: string): Promise<void> {
+    await this.bucket.delete(blobPath(vaultId, objectKey));
   }
 }
 

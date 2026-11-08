@@ -1,0 +1,21 @@
+{
+  "name": "career-agent-sync-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CareerAgent 哑云同步服务端：复用 /v1 协议，SQLite + 磁盘 blob，可跑在任何 Linux 服务器",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/index.js --external:better-sqlite3",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "smoke": "esbuild scripts/smoke.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/smoke.cjs --external:better-sqlite3 --resolve-extensions=.ts,.tsx,.js,.json --tsconfig=tsconfig.json && node dist/smoke.cjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2"
+  }
+}

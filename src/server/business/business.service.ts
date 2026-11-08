@@ -164,6 +164,8 @@ export class BusinessService {
   async deleteCompany(userId: string, id: string) {
     await this.requireCompany(userId, id);
     await this.t(userId).deleteCompanyJdsForCompany(id);
+    // 内推信息随公司一起软删除：它挂的是 companyId，留着会变成无主记录。
+    await this.t(userId).deleteReferralsForCompany(id);
     const rows = await this.t(userId).deleteCompany(id);
     if (!rows.length) throw new NotFoundException('公司不存在');
     return { ok: true };

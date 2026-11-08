@@ -209,6 +209,13 @@ export class OfflinePackTransport implements SyncTransport {
     return !!info?.isFile();
   }
 
+  async deleteBlob(objectKey: string): Promise<void> {
+    assertObjectKey(objectKey);
+    await rm(this.blobPath(objectKey), { force: true });
+    const manifest = await this.current();
+    await this.save({ ...manifest, blobs: Math.max(0, manifest.blobs - 1), updatedAt: new Date().toISOString() });
+  }
+
   /** 供 UI / 排障展示的包统计，不参与协议判定。 */
   async info(): Promise<{ vaultId: string; seq: string; events: number; blobs: number }> {
     const m = await this.current();

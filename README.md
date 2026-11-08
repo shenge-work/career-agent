@@ -42,8 +42,13 @@ npm run dev                 # 前端 5173 / API 3000
 导出矢量 PDF（文字可选中）与图片版 PDF（精确分页）；**本地版本历史**——编辑自动留痕、
 手动快照永不清理、一键恢复（恢复前当前内容自动备份，恢复可逆）。
 
-**公司档案**：公司六维调研、岗位 JD、行业分类检索；面试前一键生成 Markdown 简报
+**公司档案**：公司六维调研、岗位 JD、行业分类检索、招聘官网链接；详情页关联该公司的内推信息；
+面试前一键生成 Markdown 简报
 （详见 [D7 设计](./docs/需求文档/D7-公司档案板块设计.md)）。
+
+**内推管理**（`#/referrals`）：统一管理所有内推信息——内推人、渠道、岗位、内推码、有效期、
+跟进节奏与进度状态；按公司自动关联回公司档案，列表按「进行中优先 + 下次跟进日期」排序，
+逾期 / 3 天内需跟进直接标在卡片上（详见 [D9 设计](./docs/需求文档/D9-内推管理板块.md)）。
 
 **投递追踪**：投递状态管理、公司档案只读回链、BOSS 直聘聊天采集（本机 Chrome 调试端口，直写库去重）。
 
@@ -68,8 +73,8 @@ GET 永不回显；流式试用台；按账号统计用量。
 ```
 
 - `src/server/` NestJS：auth（认证）/ tenant（行级隔离唯一入口）/ resumes / business /
-  render（渲染孤岛与双 PDF）/ ai / collect / users / security（回环守卫）
-- `src/web/` React：登录 / 简历库 / 编辑器 / 附件库 / 冲突恢复 / 公司档案 / 投递 / AI / 面经 / 账号与设置
+  referral（内推）/ render（渲染孤岛与双 PDF）/ ai / collect / users / security（回环守卫）
+- `src/web/` React：登录 / 简历库 / 编辑器 / 附件库 / 冲突恢复 / 公司档案 / 内推 / 投递 / AI / 面经 / 账号与设置
 - `legacy/` v1 渲染引擎资产（8 个 JS + style.css + html2canvas/jspdf + boss-collect），
   只读引用、只改 bug 不重构
 - `drizzle/` 手写迁移 SQL（`_migrations` 记录已应用）
@@ -155,8 +160,17 @@ ai_configs` 是流水或单例，恢复接口返回 400、前端禁用按钮。�
 
 ### 云端选型定稿（2026-11-08）：哑云 + E2EE + 可替换 Transport
 
-**最终拍板（同日用户确认）：Cloudflare Workers + D1 + R2，密钥体系为恢复码 + E2EE。**
-离线增量包已作为第一阶段先行交付；云适配器按此实现，境内合规备选腾讯云 CloudBase / COS。
+**最终拍板（2026-11-08 用户确认）：Cloudflare Workers + D1 + R2，密钥体系为恢复码 + E2EE。**
+离线增量包已作为第一阶段先行交付；境内合规备选原本就是腾讯云 CloudBase / COS。
+
+> **2026-11-09 通道调整（用户拍板）**：Cloudflare 链路**暂时冻结待定**——R2 订阅卡在
+> Dashboard 结账页（需账单 / 卡信息）、`*.workers.dev` 在当前网络代理 502 / 直连超时，
+> 且账号暂无自有域名 zone。用户先尝试接入腾讯云 CloudBase（已落地代码、未部署），随后发现
+> 本机浏览器工具对腾讯云控制台 UI 自动化不可用、本机也无 CLI 登录态；于是决定**直接复用账号下
+> 已有的腾讯云轻量应用服务器（公网 106.55.30.22 / 广州 / 2 核 2G）自建同步服务**——
+> 复用同一套 `/v1` 协议与 `handler.ts`，配 SQLite + 磁盘 blob，零额外费用、公网可达、不受
+> R2 订阅与 workers.dev 限制。**这是当前首选落地通道**；Cloudflare 与 CloudBase 代码全部保留，
+> 随时可切回或并行。详见「任意 Linux 服务器自建同步服务（当前首选）」。
 
 **结论：云端不建业务库。** HLC 授时 / LWW / 软删除 / 冲突快照 / 人工恢复已全部由 0010~0012
 在本地完成；E2EE 下云端只见密文，托管 PG 的触发器 / RLS / Realtime 全无用武之地。
@@ -165,10 +179,11 @@ ai_configs` 是流水或单例，恢复接口返回 400、前端禁用按钮。�
 
 | 候选 | 成本（2026-11 口径） | 国内访问 | 结论 |
 |---|---|---|---|
-| Cloudflare Workers + D1 + R2 | 免费档够单人：Workers 10 万请求/日、R2 10GB 零出口费、D1 5GB；超额 $5/月起 | 三者中相对最稳，`workers.dev` 域名不稳需绑自定义域 | ✅ **已选定**：零运维，哑管道约 200 行 V8 代码 |
-| 腾讯云 CloudBase / COS | 免费 3000 资源点/月（≈¥3），个人版 ¥19.9/月 | 最稳、数据境内、合规最好 | 「必须境内」时选它；注意免费环境 6 个月续期、资源点计费切换不可逆 |
-| 自建 NestJS + PG + S3 兼容 | VPS + 域名 + 证书，成本最高 | 完全自控 | 同栈适配成本最低，但个人用偏重；留给将来多用户 SaaS |
-| Supabase 托管 PG | 免费 500MB DB / 1GB 存储，闲置 7 天暂停；Pro $25/月 | 常超时 | **不推荐**：E2EE 下其全部优势失效 |
+| **腾讯云轻量服务器自建（当前首选，已落地）** | 复用已有 VPS，零新增成本；2 核 2G 够单人，可随需升配 | 公网直连、最稳 | ✅ 复用 `/v1` 协议 + `handler.ts`，SQLite + 磁盘 blob，`cloud/sync-server/` 已在本地全链路验证 |
+| Cloudflare Workers + D1 + R2 | 免费档够单人；超额 $5/月起 | `workers.dev` 不稳，需绑自定义域 | 🧊 冻结待定：R2 订阅卡结账页、境内不可达；代码与配置原样保留 |
+| 腾讯云 CloudBase / COS | 免费 3000 资源点/月 | 最稳、数据境内 | 已接入代码未部署；控制台 UI 自动化在本机不可用，留作备选 |
+| 自建 NestJS + PG（多用户 SaaS，未来） | VPS + 域名 + 证书 | 完全自控 | 留给将来多用户；当前单人用轻量服务器版即可 |
+| Supabase 托管 PG | 免费 500MB DB / 1GB 存储 | 常超时 | **不推荐**：E2EE 下其全部优势失效 |
 | 离线增量包（任意网盘） | ¥0，零账号零运维 | 不涉及 | **第一阶段先交付**，也是 Sync Engine 的零依赖验证环境 |
 
 密钥体系与登录账号解耦：启用同步时本地生成一次性恢复码，另一台设备输入同一恢复码即可加入
@@ -248,14 +263,117 @@ const b = await CloudflareTransport.joinVault({ baseUrl, recoveryCode: code, dev
 `attach()` 用于同设备重启后附着；`push()` 会回写云端分配的 seq；`pull()` 校验序号严格递增并与
 `nextSeq` 吻合；409 映射为 `SeqConflictError`。它与 `OfflinePackTransport` 实现同一个 `SyncTransport`。
 
-### 接云还差什么（尚未实施）
+### 腾讯云 CloudBase 通道（2026-11-09 已接入，未部署）
 
-- Sync Engine 本体：全量首传 + 增量推拉 + 断点续传 + 回灌调度 + 重试，`sync_state` 表持久化游标；
-- 前端 `#/sync`：启用同步、显示恢复码、另一台设备加入、手动 / 自动同步、进度与冲突入口；
-- blob 云端引用计数 GC（本地删 ≠ 云端删，否则其它设备会拿到坏引用）；
-- 真实 Cloudflare 账号下的部署联调（自定义域名 / 配额 / 压测）——本地协议链路已全部覆盖测试。
+用户选择「先做代码 + 本地模拟」：**本轮没有创建任何云资源、没有部署、没有产生费用。**
+`cloud/sync-cloudbase/` 与 `src/server/sync/cloudbase-transport.ts` 已可用，`remote-transport.ts`
+把两个厂商共用的协议逻辑抽了出来，`CloudflareTransport` 的静态 API 与行为零回归。
 
-以上都不影响当前单机功能：断网、无云账号时本地全部可用。离线增量包已可独立验证协议全链路。
+| 层 | 文件 | 作用 |
+|---|---|---|
+| 云函数入口 | `src/gateway.ts` | HTTP 访问服务事件 ↔ 标准 `Request/Response`；`pathToV1()` 自动剥掉函数路径前缀 |
+| 云函数逻辑 | `src/app.ts` | 复用 `cloud/sync-worker/src/handler.ts`，**不依赖腾讯云 SDK** |
+| 存储实现 | `src/cloudbase-store.ts` | `SyncStore` 的 CloudBase 版：`runTransaction` 快照隔离做 CAS，云数据库存密文事件，云存储存密文 blob |
+| SDK 适配 | `src/index.ts` | `@cloudbase/node-sdk` 差异只收敛在这一处（`set` / `update({data})` / `runTransaction` 返回 `{result}` / `db.command.gt`） |
+| 客户端 | `src/server/sync/cloudbase-transport.ts` | `CloudBaseTransport`，支持 `pathPrefix` / 额外网关头 / `createVaultFromEnv` 等 |
+
+四个集合：`ca_vaults`（`authHash` 哈希 + 公开 `salt` + `headSeq`）、`ca_devices`、
+`ca_events`（`_id = vaultId:seq`）、`ca_blobs`（存云存储 `fileID`）。云端依旧只见密文。
+
+```ts
+// 只抄一串恢复码即可跨设备加入；端点与路径前缀只含连接信息，不含密钥
+const a = await CloudBaseTransport.createVaultFromEnv({ keys: deriveVaultKeys(code), deviceId: deviceId() });
+const b = await CloudBaseTransport.joinVaultFromEnv({ recoveryCode: code, deviceId: deviceId() });
+```
+
+环境变量（`cloud/sync-cloudbase/.env.example`）：`TCB_SYNC_BASE_URL`、`TCB_SYNC_PATH_PREFIX`、
+`TCB_SYNC_EXTRA_HEADERS`；云函数侧 `TCB_ENV_ID`（云函数内免密钥）。部署步骤与上线前
+需要核对的 SDK 版本差异见 `cloud/sync-cloudbase/README.md`。
+
+零账号验证：`npx vitest run test/cloudbase-sync.e2e.test.ts`（16 例，用内存版云数据库 /
+云存储替身跑**生产** `CloudBaseSyncStore`，经真实云函数入口注入客户端，覆盖网关事件、
+base64 二进制、E2EE 推拉、CAS 事务回滚、blob 往返、跨设备加入与三通道契约一致）。
+
+两端点联调脚本已支持切换：
+
+```bash
+SYNC_TRANSPORT=cloudbase SYNC_BASE_URL=https://<env>.<region>.app.tcloudbase.com \
+SYNC_PATH_PREFIX=/sync-api npx ts-node scripts/sync-smoke.ts
+```
+
+### 任意 Linux 服务器自建同步服务（2026-11-09 已落地，当前首选）
+
+用户决定复用账号下已有的腾讯云轻量应用服务器（`Hermes Agent-5bQx`，公网 `106.55.30.22`，
+广州，2 核 2G）跑同步服务。本包 `cloud/sync-server/` 与 Cloudflare Worker / CloudBase 跑**同一套**
+`/v1` 协议与 `cloud/sync-worker/src/handler.ts`，只把存储换成 **SQLite + 磁盘 blob**，因此是
+**零协议改动**的第三套后端实现——也证明「换云厂商 = 换一个 `SyncStore` + 入口，业务代码一行不改」。
+
+| 层 | 文件 | 作用 |
+|---|---|---|
+| 存储 | `src/sqlite-store.ts` | `SyncStore` 的 SQLite 实现：vaults / devices / events 落库，blob 走磁盘内容寻址（重传幂等）；CAS 靠 `PRIMARY KEY(vault_id, seq)` 冲突整批回滚 |
+| 入口 | `src/server.ts` | 原生 http 请求 ↔ Web `Request`，转调 handler，再把 `Response` 转回原生响应 |
+| 启动 | `src/index.ts` | polyfill `globalThis.crypto`，读 `PORT / DATA_DIR / DB_PATH / BLOB_DIR` 启动 |
+
+本地构建与全链路自检（E2EE 推拉、CAS、blob 往返、跨 vault 隔离、未授权 401 共 8 组用例全过）：
+
+```bash
+cd cloud/sync-server
+npm install
+npm run build      # 产出 dist/index.js（external better-sqlite3）
+npm run smoke       # 本地起临时 SQLite + HTTP，跑完整协议自检
+```
+
+部署到服务器（完整步骤见 `cloud/sync-server/README.md`）：上传 `dist/` + `package.json`
+→ `npm install --omit=dev` → `node dist/index.js`（默认监听 `0.0.0.0:8788`）。前面用 Caddy / Nginx
+反向代理提供 HTTPS（客户端 `RemoteSyncTransport` 强制 https；有域名时 Caddy 自动签发最省事）。
+部署后 `BASE_URL=https://<你的域名> npm run smoke` 可做远端自检。
+
+客户端只需把 `baseUrl` 指向上面的 https 域名——`RemoteSyncTransport` 本就厂商无关，
+无需任何厂商专属适配器：
+
+```ts
+const a = new RemoteSyncTransport({ baseUrl, keys: deriveVaultKeys(code), deviceId: deviceId() });
+```
+
+### 真实账号部署进展（2026-11-08，Cloudflare 链路已冻结待定）
+
+已在该 Cloudflare 账号落地：D1 `career-agent-sync`（`9970f317-1b20-4d47-be5c-137b69e6216d`，
+`schema.sql` 已应用 3 张表）、Worker `career-agent-sync`（`https://career-agent-sync.shenge-work.workers.dev`）；
+本机 `wrangler` 已有该账号 OAuth 授权。
+
+**当前线上是「事件通道版」**：R2 订阅仍停在 Dashboard 结账页（需账单 / 卡信息，由用户手动完成），
+所以临时用 `wrangler.events-only.toml`（去掉 `[[r2_buckets]]` 绑定）部署。订阅开通并创建
+`career-agent-sync-blobs` 桶后用主 `wrangler.toml` 重新 `npm run deploy` 即为完整版。
+
+**网络限制（实测）**：`*.workers.dev` 在当前环境走代理返回 `502 CONNECT tunnel failed`、直连超时，
+用户 Chrome 也是错误页；账号目前没有自有域名 zone，公网联调需先在 Dashboard `Add a domain`
+并给 Worker 绑自定义域名（或换可达网络）。`wrangler dev` 的远程 D1 绑定通道报 Cloudflare
+`internal error`，但同一 SQL 经 `wrangler d1 execute --remote` 正常，判定为 Wrangler 远程绑定链路问题，
+不是 Worker 代码问题。
+
+**已在真实 Workers 运行时验证**（本地 D1 副本，`scripts/sync-smoke.ts`）：health、建 vault、
+加密 push、pull 解密还原业务行、CAS 冲突、另一设备 joinVault 全部通过。
+
+```bash
+# 本地 Workers 运行时联调（先 npm run db:init:local + wrangler dev）
+SYNC_BASE_URL=http://127.0.0.1:8787 SYNC_SKIP_BLOB=1 npx ts-node scripts/sync-smoke.ts
+# 自定义域名就绪后：换成 https 域名并去掉 SYNC_SKIP_BLOB，即可跑含 blob 的完整联调
+```
+
+### 接云已全部落地（2026-11-09）· 剩余非阻塞项
+
+✅ **Sync Engine 本体**（`src/server/sync/engine.ts`）：pull → push → GC 三阶段各自独立游标，
+基线全量首传 / 增量 `change_log` 推拉 / 断点续传 / CAS 重试 / 回灌调度，`sync_state` 表持久化游标。
+✅ **前端 `#/sync`**：启用同步、一次性恢复码展示与复制、另一台设备加入、立即同步、进度与冲突入口。
+✅ **blob 云端引用计数 GC**：本地删 ≠ 云端删，`knownBlobs` 比对引用集走 `deleteBlob`（transport 全链路已加）。
+✅ **真实服务器部署联调**：`cloud/sync-server/` 已部署到腾讯云轻量服务器 `106.55.30.22` 并开 HTTPS
+（自签名 TLS，生产端点 `https://106.55.30.22`），公网端到端 smoke 全过。
+
+**剩余非阻塞项**：`#/sync` 桌面端手测、两台真实设备恢复码加入实测（等桌面安装包发布）；
+服务器 2026-12-08 到期需续费；有域名后换 Let's Encrypt 去掉客户端 `insecureTls`。
+
+以上都不影响当前单机功能：断网、无云账号时本地全部可用。完整技术方案见
+`docs/技术设计方案/云同步技术设计方案.md`。
 
 **数据目录**：打包时务必设置 `CAREER_AGENT_DATA_DIR` 到用户可写的绝对路径
 （macOS `~/Library/Application Support/CareerAgent`、Windows `%APPDATA%\CareerAgent`），
@@ -301,6 +419,7 @@ HttpOnly；AI 上游只放行 https 公网 / http 回环。**≤10 人本机内�
 ## 📁 文档
 
 - [docs/v2重构归档/](./docs/v2重构归档/README.md)：v1→v2 重构全记录（选型、架构、逐阶段验收、运维）
+- [docs/技术设计方案/](./docs/技术设计方案/)：技术设计方案（含 [云同步技术设计方案](./docs/技术设计方案/云同步技术设计方案.md)）
 - [docs/需求文档/](./docs/需求文档/README.md)：需求清单（D/N 编号）
 - [ROADMAP.md](./ROADMAP.md)：路线图（含 v1 退役后待补能力清单）
 - [CHANGELOG.md](./CHANGELOG.md)：变更记录

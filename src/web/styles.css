@@ -2341,3 +2341,174 @@ pre.pitch-text { font-family: inherit; }
   .cf-summary .cf-stat { flex: 1 1 42%; }
   .cf-toolbar input { flex-basis: 100%; }
 }
+
+/* =============================================================
+ * 内推板块（Referral）
+ * -------------------------------------------------------------
+ * 只复用主题语义色（accent / muted / border / surface），
+ * 状态色沿用 .status-badge + .tone-* 的既有语义。
+ * ============================================================= */
+.ref-stats { margin-bottom: 12px; flex-wrap: wrap; }
+
+.ref-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.ref-toolbar .ref-search { flex: 1 1 240px; min-width: 200px; margin: 0; }
+.ref-toolbar select { flex: 0 0 150px; width: 150px; margin: 0; }
+.ref-toolbar button { margin: 0; }
+
+.ref-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px;
+  align-items: start;
+}
+
+.ref-list { display: flex; flex-direction: column; gap: 10px; }
+
+.ref-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ref-card:hover { border-color: var(--muted); background: var(--surface-2); }
+.ref-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.ref-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.ref-card-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+
+.ref-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ref-card-meta .li-salary { color: rgba(var(--_amber), 1); font-weight: 500; }
+
+.ref-card-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.ref-card-links .tag { margin-left: 0; }
+.ref-card-links a { color: var(--accent); text-decoration: none; }
+.ref-card-links a:hover { text-decoration: underline; }
+
+.ref-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ref-main { display: flex; flex-direction: column; gap: 16px; }
+.ref-main .panel h2 { margin-bottom: 12px; }
+
+.ref-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ref-notes {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.ref-main .kv { grid-template-columns: 78px minmax(0, 1fr); }
+
+.ref-form { display: flex; flex-direction: column; gap: 10px; }
+.ref-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ref-form input, .ref-form select, .ref-form textarea { margin-top: 0; }
+.ref-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.ref-form textarea:focus { border-color: rgba(var(--_indigo), 0.6); }
+
+.ref-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ref-form-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ref-form .btn-row { margin-top: 4px; }
+
+/* 公司详情页里的招聘入口 + 内推 */
+.ref-link-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.ref-link-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ref-link-grid input { margin-top: 0; }
+.ref-link-grid button { margin-bottom: 1px; }
+
+.ref-quick {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 130px auto;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0 4px;
+}
+.ref-quick input, .ref-quick select { margin-top: 0; }
+
+.ref-list-mini li { padding: 8px 0; }
+.ref-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+@media (max-width: 1000px) {
+  .ref-layout { grid-template-columns: 1fr; }
+  .ref-link-grid { grid-template-columns: 1fr; }
+  .ref-quick { grid-template-columns: 1fr 1fr; }
+  .ref-form-row.three { grid-template-columns: 1fr; }
+}

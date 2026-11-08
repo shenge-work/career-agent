@@ -1,7 +1,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { api, del, fmtTime, post, put, type CompanyItem, type JdItem } from '../api';
+import { api, del, fmtTime, post, put, type CompanyItem, type JdItem, type ReferralItem } from '../api';
 import {
   buildBrief,
   dimensionCoverage,
@@ -10,6 +10,12 @@ import {
   RESEARCH_DIMS,
   type CompanyIntel,
 } from '../company-intel';
+import {
+  careersUrlOf,
+  normalizeReferral,
+  referralEntryUrlOf,
+  statusMeta,
+} from '../referrals';
 
 /** 公司详情页：独立页面，宽度更宽。 */
 export default function CompanyDetailPage() {
@@ -29,6 +35,10 @@ export default function CompanyDetailPage() {
   const [editSummary, setEditSummary] = useState('');
   const [editTags, setEditTags] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // 招聘官网 / 内推入口：直接写 companies.payload，用独立输入框避免被「编辑元信息」覆盖。
+  const [careersDraft, setCareersDraft] = useState<string | null>(null);
+  const [referralDraft, setReferralDraft] = useState<string | null>(null);
+  const [quickRef, setQuickRef] = useState({ referrer: '', position: '', channel: '', status: 'pending' });
 
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ['companies'],
@@ -43,8 +53,20 @@ export default function CompanyDetailPage() {
     enabled: !!id,
   });
 
+  // 该公司的内推信息：与内推板块共用同一份数据，这里只读 + 快速新增。
+  const { data: referralRows = [] } = useQuery({
+    queryKey: ['referrals', 'company', id],
+    queryFn: () => api<ReferralItem[]>(`/referrals?companyId=${encodeURIComponent(String(id))}`),
+    enabled: !!id,
+  });
+  const referralList = referralRows.map((r) => ({ row: r, ref: normalizeReferral(r.payload, r.companyId) }));
+
   const invalidateCompanies = () => qc.invalidateQueries({ queryKey: ['companies'] });
   const invalidateJds = () => qc.invalidateQueries({ queryKey: ['jds', id] });
+  const invalidateReferrals = () => {
+    qc.invalidateQueries({ queryKey: ['referrals', 'company', id] });
+    qc.invalidateQueries({ queryKey: ['referrals'] });
+  };
   const onFail = (e: unknown) => setError((e as Error).message);
 
   const deleteM = useMutation({
@@ -77,6 +99,43 @@ export default function CompanyDetailPage() {
       setEditCategory('');
       invalidateCompanies();
     },
+    onError: onFail,
+  });
+
+  /** 招聘官网 / 内推入口：只补这两个键，其余 payload 原样带回去。 */
+  const linksM = useMutation({
+    mutationFn: (patch: Record<string, string>) =>
+      put<CompanyItem>(`/companies/${id}`, { payload: { ...(company?.payload || {}), ...patch } }),
+    onSuccess: () => {
+      setCareersDraft(null);
+      setReferralDraft(null);
+      invalidateCompanies();
+    },
+    onError: onFail,
+  });
+
+  const addReferralM = useMutation({
+    mutationFn: () =>
+      post<ReferralItem>('/referrals', {
+        companyId: id,
+        payload: {
+          companyName: company?.name,
+          referrer: quickRef.referrer.trim(),
+          position: quickRef.position.trim(),
+          channel: quickRef.channel.trim(),
+          status: quickRef.status,
+        },
+      }),
+    onSuccess: () => {
+      setQuickRef({ referrer: '', position: '', channel: '', status: 'pending' });
+      invalidateReferrals();
+    },
+    onError: onFail,
+  });
+
+  const deleteReferralM = useMutation({
+    mutationFn: (rid: string) => del(`/referrals/${rid}`),
+    onSuccess: invalidateReferrals,
     onError: onFail,
   });
 
@@ -116,6 +175,8 @@ export default function CompanyDetailPage() {
   if (!company || !intel) return <p className="muted">未找到公司。</p>;
 
   const cov = dimensionCoverage(intel);
+  const careersUrl = careersDraft ?? careersUrlOf(company?.payload);
+  const referralUrl = referralDraft ?? referralEntryUrlOf(company?.payload);
 
   return (
     <div className="detail-page">
@@ -152,6 +213,11 @@ export default function CompanyDetailPage() {
           {intel.website && (
             <a className="meta-chip" href={String(intel.website)} target="_blank" rel="noopener noreferrer">
               官网 ↗
+            </a>
+          )}
+          {careersUrl && (
+            <a className="meta-chip" href={careersUrl} target="_blank" rel="noopener noreferrer">
+              招聘官网 ↗
             </a>
           )}
         </div>
@@ -243,6 +309,145 @@ export default function CompanyDetailPage() {
           </button>
         </div>
       </details>
+
+      {/* 招聘入口 + 内推信息：公司详情只读展示，编辑统一在内推板块 */}
+      <section className="detail-section">
+        <div className="section-head">
+          <h3 className="sub">招聘官网与内推（{referralList.length}）</h3>
+          <Link to={`/referrals?company=${company.id}`} className="detail-back">
+            在内推板块管理 →
+          </Link>
+        </div>
+
+        <div className="ref-link-grid">
+          <label>
+            招聘官网链接
+            <input
+              value={careersUrl}
+              onChange={(e) => setCareersDraft(e.target.value)}
+              placeholder="https://careers.example.com"
+            />
+          </label>
+          <label>
+            内推入口（可选）
+            <input
+              value={referralUrl}
+              onChange={(e) => setReferralDraft(e.target.value)}
+              placeholder="https://…/referral"
+            />
+          </label>
+          <button
+            className="mini primary"
+            disabled={linksM.isPending}
+            onClick={() =>
+              linksM.mutate({ careersUrl: careersUrl.trim(), referralUrl: referralUrl.trim() })
+            }
+          >
+            {linksM.isPending ? '保存中…' : '保存链接'}
+          </button>
+        </div>
+
+        <div className="btn-row">
+          {careersUrl ? (
+            <a className="mini" href={careersUrl} target="_blank" rel="noopener noreferrer">
+              打开招聘官网 ↗
+            </a>
+          ) : (
+            <span className="muted small">还没有记录招聘官网链接。</span>
+          )}
+          {referralUrl && (
+            <a className="mini" href={referralUrl} target="_blank" rel="noopener noreferrer">
+              打开内推入口 ↗
+            </a>
+          )}
+        </div>
+
+        {/* 快速新增：完整字段在内推板块里编辑 */}
+        <form
+          className="ref-quick"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            if (!quickRef.referrer.trim() && !quickRef.position.trim()) {
+              setError('内推人与岗位至少填一个');
+              return;
+            }
+            addReferralM.mutate();
+          }}
+        >
+          <input
+            value={quickRef.referrer}
+            onChange={(e) => setQuickRef({ ...quickRef, referrer: e.target.value })}
+            placeholder="内推人"
+          />
+          <input
+            value={quickRef.position}
+            onChange={(e) => setQuickRef({ ...quickRef, position: e.target.value })}
+            placeholder="内推岗位"
+          />
+          <input
+            value={quickRef.channel}
+            onChange={(e) => setQuickRef({ ...quickRef, channel: e.target.value })}
+            placeholder="渠道（朋友 / 脉脉…）"
+          />
+          <select
+            value={quickRef.status}
+            onChange={(e) => setQuickRef({ ...quickRef, status: e.target.value })}
+          >
+            <option value="pending">待沟通</option>
+            <option value="contacted">已沟通</option>
+            <option value="submitted">已内推</option>
+            <option value="screening">简历通过</option>
+            <option value="interviewing">面试中</option>
+            <option value="offered">已录用</option>
+            <option value="closed">已失效</option>
+          </select>
+          <button className="mini" type="submit" disabled={addReferralM.isPending}>
+            {addReferralM.isPending ? '添加中…' : '添加内推'}
+          </button>
+        </form>
+
+        {referralList.length ? (
+          <ul className="mini-list ref-list-mini">
+            {referralList.map(({ row, ref: r }, i) => {
+              const meta = statusMeta(r.status);
+              return (
+                <li key={row.id || i}>
+                  <div className="ref-row-head">
+                    <strong>{r.position || r.referrer || '未命名内推'}</strong>
+                    <span className={`status-badge tone-${meta.tone}`}>{meta.label}</span>
+                  </div>
+                  <div className="muted small">
+                    {r.referrer ? `内推人 ${r.referrer}` : '内推人未填'}
+                    {r.channel ? ` · ${r.channel}` : ''}
+                    {r.followUpAt ? ` · ${r.followUpAt} 跟进` : ''}
+                  </div>
+                  <div className="btn-row">
+                    {r.jobUrl && (
+                      <a className="mini" href={r.jobUrl} target="_blank" rel="noopener noreferrer">
+                        岗位链接 ↗
+                      </a>
+                    )}
+                    {r.referralCode && <span className="tag">内推码 {r.referralCode}</span>}
+                    <button
+                      className="mini danger"
+                      onClick={() => {
+                        if (window.confirm(`确认删除「${r.position || r.referrer || '这条内推'}」？`))
+                          deleteReferralM.mutate(row.id);
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="muted small" style={{ marginTop: 12 }}>
+            还没有这家公司的内推信息。上方快速添加，或去内推板块录入完整信息（内推码、有效期、跟进日期）。
+          </p>
+        )}
+      </section>
 
       {/* 简报生成 */}
       {briefOpen && (

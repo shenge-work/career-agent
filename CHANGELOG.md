@@ -57,6 +57,16 @@
   行业分类词表（一级门类 → 二级赛道 + 同义词扩展）、摘要与标签、六维完整度、
   卡片化列表 + 行业筛选与搜索、详情分区展示、Markdown 公司简报。
 
+- **云同步全线落地（2026-11-09）**：本地冲突地基（0010~0012）之上补齐接云全链路——
+  `0013_sync_state`（per-user 同步状态表）、`0014_stale_echo_guard`（堵「陈旧回声」回退洞）、
+  `sync/engine.ts`（SyncEngine：pull→push→GC 三阶段独立游标、基线全量首传、增量 change_log、
+  CAS 重试、附件 blob 先传后推、双端 GC）、`sync/sync-cloud.service.ts` + controller
+  （status/setup/disable/sync/recovery）、transport 全链路 `deleteBlob`（云端 blob 引用计数 GC）、
+  前端 `#/sync`（恢复码启用/加入、状态、立即同步、冲突入口）、`test/sync-engine.e2e.test.ts`(7 例)。
+  云端三套后端（Cloudflare Workers+D1+R2 / 腾讯云 CloudBase / 任意 Linux 自建 SQLite+磁盘）共用
+  同一 `/v1` 协议与 `handler.ts`；当前首选通道**腾讯云轻量服务器 `106.55.30.22` 自建**已真实部署
+  上线（自签名 TLS，公网 smoke 全过）。完整方案见 `docs/技术设计方案/云同步技术设计方案.md`。
+
 ### 历史记录说明
 
 - 本文件此条目之上的全部历史记录属于 **v1（零后端单文件形态）**，随 v1 退役归档；

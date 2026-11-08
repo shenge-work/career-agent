@@ -132,6 +132,8 @@ export interface SyncTransport {
   putBlob(objectKey: string, stream: Readable, bytes: number): Promise<void>;
   getBlob(objectKey: string): Promise<Readable>;
   hasBlob(objectKey: string): Promise<boolean>;
+  /** 删除云端 blob；内容寻址，删除前由客户端比对引用集，云端不感知引用关系。 */
+  deleteBlob(objectKey: string): Promise<void>;
 }
 
 /** objectKey 白名单：任何外部输入都必须过这一关才能拼路径。 */

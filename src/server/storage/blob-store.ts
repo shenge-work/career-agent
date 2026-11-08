@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
@@ -53,6 +53,8 @@ export interface BlobStore {
   stat(sha256: string): Promise<{ bytes: number } | null>;
   /** 仅供 GC 使用：删除前必须确认没有任何 attachments 行引用该 hash。 */
   remove(sha256: string): Promise<void>;
+  /** 列出本地全部 blob 的 sha256；仅供 GC 比对引用集。 */
+  list(): Promise<string[]>;
 }
 
 /** Nest DI token：测试 / 云端实现可整体替换。 */
@@ -150,5 +152,30 @@ export class LocalBlobStore implements BlobStore {
 
   async remove(sha256: string): Promise<void> {
     await rm(this.pathFor(sha256), { force: true });
+  }
+
+  /** 遍历 blobs/sha256/<前2>/<后62>；目录不存在返回空。 */
+  async list(): Promise<string[]> {
+    const out: string[] = [];
+    const root = path.join(this.root, 'sha256');
+    let prefixes: string[] = [];
+    try {
+      prefixes = await readdir(root);
+    } catch {
+      return out;
+    }
+    for (const p of prefixes) {
+      if (!/^[0-9a-f]{2}$/.test(p)) continue;
+      let names: string[] = [];
+      try {
+        names = await readdir(path.join(root, p));
+      } catch {
+        continue;
+      }
+      for (const n of names) {
+        if (/^[0-9a-f]{62}$/.test(n)) out.push(p + n);
+      }
+    }
+    return out;
   }
 }

@@ -39,6 +39,7 @@ const RESTORABLE = new Set([
   'resumes',
   'companies',
   'company_jds',
+  'referrals',
   'tracker',
   'applications',
   'portfolios',

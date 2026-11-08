@@ -40,6 +40,15 @@ export interface JdItem {
   createdAt: string;
 }
 
+/** 内推信息：公司关联 + 自由 payload（内推人/岗位/渠道/状态/链接/跟进日期）。 */
+export interface ReferralItem {
+  id: string;
+  companyId: string | null;
+  payload: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TrackerItem {
   id: string;
   companyId: string | null;
@@ -176,6 +185,49 @@ export interface ConflictRestoreResult {
   backupSnapshotId: string | null;
   restoredTitle: string | null;
 }
+
+/** 云同步（Sync Engine）一轮同步的统计。 */
+export interface SyncRunStats {
+  pulled: number;
+  applied: number;
+  rejected: number;
+  skipped: number;
+  pushed: number;
+  baseline: boolean;
+  blobsUploaded: number;
+  blobsDownloaded: number;
+  localBlobsGc: number;
+  cloudBlobsGc: number;
+  pulledSeq: string;
+  pushedCursor: string;
+  headSeq: string;
+}
+
+/** GET /api/sync/status。 */
+export interface SyncCloudStatus {
+  enabled: boolean;
+  vaultId?: string;
+  deviceId?: string;
+  status?: 'idle' | 'syncing' | 'error' | 'disabled';
+  lastError?: string | null;
+  lastSyncAt?: string | null;
+  pushedCursor?: string;
+  pulledSeq?: string;
+  baseUrl?: string;
+}
+
+/** POST /api/sync/enable 响应；recoveryCode 只回显这一次。 */
+export interface SyncEnableResult {
+  mode: 'created' | 'joined';
+  recoveryCode: string;
+  stats: SyncRunStats;
+}
+
+export const getSyncStatus = () => api<SyncCloudStatus>('/sync/status');
+export const enableSync = (recoveryCode: string) =>
+  post<SyncEnableResult>('/sync/enable', { recoveryCode });
+export const runSync = () => post<SyncRunStats>('/sync/run');
+export const disableSync = () => post<{ ok: true }>('/sync/disable');
 
 export const restoreConflict = (id: string) =>
   post<ConflictRestoreResult>(`/sync/conflicts/${encodeURIComponent(id)}/restore`);
