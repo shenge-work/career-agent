@@ -356,7 +356,7 @@ const RESUME_CONFLICT_FORCE = `ON CONFLICT (user_id, id) DO UPDATE SET
   title = EXCLUDED.title, kind = EXCLUDED.kind, parent_id = EXCLUDED.parent_id,
   job_id = EXCLUDED.job_id, jd_text = EXCLUDED.jd_text, tags = EXCLUDED.tags,
   is_master = EXCLUDED.is_master, payload = EXCLUDED.payload,
-  saved_at = EXCLUDED.saved_at, updated_at = now()`;
+  saved_at = EXCLUDED.saved_at, updated_at = now(), deleted_at = NULL`;
 
 function normalizeJsonb(v: any): any {
   if (typeof v === 'string') {
@@ -442,7 +442,7 @@ export async function importV1(
     for (const c of snapshot.companies) {
       const sql = `INSERT INTO companies (id, user_id, name, payload)
         VALUES ($1, $2, $3, $4::jsonb)
-        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET name = EXCLUDED.name, payload = EXCLUDED.payload, updated_at = now()' : 'ON CONFLICT (user_id, id) DO NOTHING'}
+        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET name = EXCLUDED.name, payload = EXCLUDED.payload, updated_at = now(), deleted_at = NULL' : 'ON CONFLICT (user_id, id) DO NOTHING'}
         RETURNING id`;
       const res = await client.query(sql, [c.id, userId, c.name, JSON.stringify(c.payload)]);
       if (res.rows.length) {
@@ -456,7 +456,7 @@ export async function importV1(
     for (const j of snapshot.companyJds) {
       const sql = `INSERT INTO company_jds (id, user_id, company_id, payload)
         VALUES ($1, $2, $3, $4::jsonb)
-        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET company_id = EXCLUDED.company_id, payload = EXCLUDED.payload' : 'ON CONFLICT (user_id, id) DO NOTHING'}
+        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET company_id = EXCLUDED.company_id, payload = EXCLUDED.payload, deleted_at = NULL' : 'ON CONFLICT (user_id, id) DO NOTHING'}
         RETURNING id`;
       const res = await client.query(sql, [j.id, userId, j.companyId, JSON.stringify(j.payload)]);
       if (res.rows.length) {
@@ -470,7 +470,7 @@ export async function importV1(
     for (const t of snapshot.tracker) {
       const sql = `INSERT INTO tracker (id, user_id, company_id, payload)
         VALUES ($1, $2, $3, $4::jsonb)
-        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET company_id = EXCLUDED.company_id, payload = EXCLUDED.payload, updated_at = now()' : 'ON CONFLICT (user_id, id) DO NOTHING'}
+        ${force ? 'ON CONFLICT (user_id, id) DO UPDATE SET company_id = EXCLUDED.company_id, payload = EXCLUDED.payload, updated_at = now(), deleted_at = NULL' : 'ON CONFLICT (user_id, id) DO NOTHING'}
         RETURNING id`;
       const res = await client.query(sql, [t.id, userId, t.companyId, JSON.stringify(t.payload)]);
       if (res.rows.length) {

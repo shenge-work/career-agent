@@ -117,6 +117,8 @@ export default function Library() {
   const [jdParsed, setJdParsed] = useState<JdParseResult | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'updated' | 'title'>('updated');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const { data: resumes = [], isLoading } = useQuery({
     queryKey: ['resumes'],
@@ -240,6 +242,10 @@ export default function Library() {
     return arr;
   }, [resumes, sortBy]);
 
+  // 分页
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const pageData = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <>
       <div className="page-head">
@@ -283,8 +289,9 @@ export default function Library() {
           ) : sorted.length === 0 ? (
             <div className="empty">还没有简历，先新建一份。</div>
           ) : (
+            <>
             <ul className="list">
-              {sorted.map((r) => (
+              {pageData.map((r) => (
                 <li
                   key={r.id}
                   className={'lib-row' + (selectedId === r.id ? ' selected' : '')}
@@ -330,6 +337,30 @@ export default function Library() {
                 </li>
               ))}
             </ul>
+
+            {/* 分页 */}
+            {totalPages > 1 && (
+              <div className="pagination" style={{ marginTop: 16 }}>
+                <button
+                  className="page-btn"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  ← 上一页
+                </button>
+                <span className="page-info">
+                  第 {page} / {totalPages} 页
+                </span>
+                <button
+                  className="page-btn"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  下一页 →
+                </button>
+              </div>
+            )}
+            </>
           )}
         </section>
 

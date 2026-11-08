@@ -1,0 +1,17 @@
+{
+  "name": "career-agent-sync-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CareerAgent 哑云同步服务（Cloudflare Workers + D1 + R2）",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "db:init:local": "wrangler d1 execute career-agent-sync --local --file=./schema.sql",
+    "db:init": "wrangler d1 execute career-agent-sync --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

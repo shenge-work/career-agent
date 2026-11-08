@@ -76,6 +76,8 @@ export default function Portfolio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', templateId: 'minimal' });
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['portfolios'],
@@ -154,33 +156,58 @@ export default function Portfolio() {
           ) : items.length === 0 ? (
             <div className="empty">还没有作品集。从「新建作品集」开始。</div>
           ) : (
-            <ul className="list">
-              {items.map((p) => (
-                <li key={p.id} className={selected?.id === p.id ? 'selected' : ''}>
-                  <span className="dot tone-indigo" />
-                  <div className="li-main">
-                    <div className="title">{p.title}</div>
-                    <div className="muted small">
-                      {TEMPLATE_NAME[p.templateId] || p.templateId}
-                      {p.deploy?.lastUrl ? ' · 已发布' : ''}
+            <>
+              <ul className="list">
+                {items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((p) => (
+                  <li key={p.id} className={selected?.id === p.id ? 'selected' : ''}>
+                    <span className="dot tone-indigo" />
+                    <div className="li-main">
+                      <div className="title">{p.title}</div>
+                      <div className="muted small">
+                        {TEMPLATE_NAME[p.templateId] || p.templateId}
+                        {p.deploy?.lastUrl ? ' · 已发布' : ''}
+                      </div>
+                      <div className="btn-row">
+                        <button className="mini" onClick={() => setSelectedId(p.id)}>
+                          详情
+                        </button>
+                        <button
+                          className="mini danger"
+                          onClick={() => {
+                            if (window.confirm(`确认删除作品集「${p.title}」？`)) deleteM.mutate(p.id);
+                          }}
+                        >
+                          删除
+                        </button>
+                      </div>
                     </div>
-                    <div className="btn-row">
-                      <button className="mini" onClick={() => setSelectedId(p.id)}>
-                        详情
-                      </button>
-                      <button
-                        className="mini danger"
-                        onClick={() => {
-                          if (window.confirm(`确认删除作品集「${p.title}」？`)) deleteM.mutate(p.id);
-                        }}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+
+              {/* 分页 */}
+              {items.length > PAGE_SIZE && (
+                <div className="pagination" style={{ marginTop: 16 }}>
+                  <button
+                    className="page-btn"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    ← 上一页
+                  </button>
+                  <span className="page-info">
+                    第 {page} / {Math.ceil(items.length / PAGE_SIZE)} 页
+                  </span>
+                  <button
+                    className="page-btn"
+                    disabled={page >= Math.ceil(items.length / PAGE_SIZE)}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    下一页 →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
 

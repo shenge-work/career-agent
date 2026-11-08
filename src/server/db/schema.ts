@@ -16,11 +16,24 @@ import { sql } from 'drizzle-orm';
 /**
  * 所有业务表都带 user_id —— 这是行级数据隔离的物理基础。
  * 查询一律经 TenantDb.forUser(userId)，禁止在 controller 里手写 where。
- * DDL 与 drizzle/0000_init.sql 一一对应，改这里必须同步改迁移文件。
+ * DDL 与 drizzle/*.sql 一一对应，改这里必须同步改迁移文件。
+ *
+ * 0011 起每张业务表都带同步三元组（hlc / device_id / deleted_at），由数据库
+ * BEFORE 触发器统一维护，应用层不要自己写这三列：
+ *   · hlc        跨设备 HLC 因果时钟，LWW 冲突判定的唯一依据；
+ *   · device_id  写来源设备，同一设备的重复回灌不算并发冲突；
+ *   · deleted_at 软删除墓碑，null = 活跃行；读查询必须经 TenantDb 的 active() 过滤。
+ * savedAt / updatedAt 是本机墙钟，只用于 UI 展示与排序，绝不参与冲突判定。
  */
-
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
+
+/** 每次返回全新的 column builder，避免多表共用同一个实例造成 drizzle 状态串味。 */
+const syncCols = () => ({
+  hlc: text('hlc').notNull().default(''),
+  deviceId: text('device_id').notNull().default('local'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -70,6 +83,7 @@ export const resumes = pgTable(
     savedAt: bigint('saved_at', { mode: 'number' }).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -78,7 +92,10 @@ export const resumes = pgTable(
   ]
 );
 
-/** N11 本地版本历史：快照不含 savedAt，按用户 + 简历隔离。 */
+/**
+ * N11 本地版本历史：快照不含 savedAt，按用户 + 简历隔离。
+ * 流式/不可变表：deleted_at 恒为 null，降采样仍走物理删除（见 0011 注释）。
+ */
 export const versions = pgTable(
   'versions',
   {
@@ -91,6 +108,7 @@ export const versions = pgTable(
     label: text('label'),
     snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
+    ...syncCols(),
   },
   (t) => [index('versions_user_resume_idx').on(t.userId, t.resumeId)]
 );
@@ -107,6 +125,7 @@ export const companies = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -124,6 +143,7 @@ export const companyJds = pgTable(
     companyId: text('company_id').notNull(),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -142,6 +162,7 @@ export const tracker = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -189,6 +210,7 @@ export const applications = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -200,6 +222,7 @@ export const applications = pgTable(
 /**
  * 岗位状态流水：每次 status/stage 变更追加一条，作为「求职旅程时间线」的事实源。
  * tracker 历史状态在迁移时回填为 events（见 drizzle/0005_applications.sql）。
+ * append-only：deleted_at 恒为 null，级联清理走物理删除。
  */
 export const applicationEvents = pgTable(
   'application_events',
@@ -213,6 +236,7 @@ export const applicationEvents = pgTable(
     toStatus: text('to_status').notNull(),
     note: text('note'),
     createdAt: createdAt(),
+    ...syncCols(),
   },
   (t) => [index('app_events_user_app_idx').on(t.userId, t.applicationId)]
 );
@@ -245,6 +269,7 @@ export const portfolios = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -280,6 +305,7 @@ export const interviewNotes = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -309,6 +335,7 @@ export const interviewKb = pgTable(
     content: text('content').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    ...syncCols(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -334,12 +361,154 @@ export const shareGrants = pgTable(
   (t) => [index('share_grants_user_idx').on(t.userId)]
 );
 
+/**
+ * 本地附件（local-first 文件存储的元数据侧）。
+ *
+ * 字节不进 PG：落在 <dataRoot>/blobs/sha256/<前2>/<后62>，这里只存不可变的内容指纹与归属。
+ * 这样 DBeaver 能查到完整附件清单，云端同步时 object key 直接复用 sha256，零映射。
+ *
+ * 可同步设计：
+ *   · hlc / device_id：HLC 逻辑时钟（字典序即因果序），替代会漂移的墙钟做 last-write-wins；
+ *   · sync_state / remote_key：本地优先 → 云端托管的迁移落点，先只写不读，接云时无需洗表；
+ *   · deleted_at：软删除墓碑，保证「A 设备删除」能同步出去，不会在 B 设备上僵尸复活。
+ *   附件走应用层 recordChange 记账，不挂 0011 的业务表触发器（避免两处时钟互相覆盖）。
+ */
+export const attachments = pgTable(
+  'attachments',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 内容指纹，同时是本地 blob 路径与未来云端 object key。 */
+    sha256: text('sha256').notNull(),
+    /** 由 magic number 判定，绝不采信客户端声明的 content-type。 */
+    mime: text('mime').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
+    /** 仅用于展示，永不参与拼路径。 */
+    originalName: text('original_name').notNull(),
+    /** 归属聚合根（resume / application / company / interview 等），可为空。 */
+    ownerType: text('owner_type'),
+    ownerId: text('owner_id'),
+    /** local 本地新增 / pending 待上传 / synced 已上云 / remote_only 本地未缓存。 */
+    syncState: text('sync_state', {
+      enum: ['local', 'pending', 'synced', 'remote_only'],
+    })
+      .notNull()
+      .default('local'),
+    /** 云端 object key；本地阶段为 null，接云后通常等于 sha256。 */
+    remoteKey: text('remote_key'),
+    hlc: text('hlc').notNull(),
+    deviceId: text('device_id').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('attachments_user_sha_idx').on(t.userId, t.sha256),
+    index('attachments_user_hlc_idx').on(t.userId, t.hlc),
+    index('attachments_user_owner_idx').on(t.userId, t.ownerType, t.ownerId),
+  ]
+);
+
+/**
+ * 变更日志（同步 outbox）：所有本地写操作按 user 记一条增量，云端按 hlc 游标拉取。
+ *
+ * 写入路径：附件模块用 sync/change-log.ts 的 recordChange 同事务记账；其余业务表
+ * 由 drizzle/0010 + 0011 的触发器自动记账（软删除/物理删除都写 delete 墓碑）。
+ * hlc 由 ca_change_log_cursor 触发器统一改写为本地严格单调的拉取游标；
+ * 跨设备冲突判定请用业务行自己的 hlc，不要把本地游标当全局时钟。
+ * 回灌期间（app.sync_import='on'）change_log 写入会被吞掉，防止云端变更被推回去成环。
+ * 注意：这不是 pgDump / WAL 物理复制 —— PGlite 的 pgdata 无法被原生 PG 打开。
+ */
+export const changeLog = pgTable(
+  'change_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 表名 / 聚合根名，如 attachments、resumes。 */
+    entity: text('entity').notNull(),
+    entityId: text('entity_id').notNull(),
+    op: text('op', { enum: ['upsert', 'delete'] }).notNull(),
+    hlc: text('hlc').notNull(),
+    deviceId: text('device_id').notNull(),
+    /** 增量载荷：轻量信号；软删除带 deleted_at，chat 事件带消息本体。 */
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (t) => [index('change_log_user_hlc_idx').on(t.userId, t.hlc)]
+);
+
+/**
+ * 0011 · 跨设备冲突快照：LWW 判定后把「落败方整行」留底，绝不静默丢改动。
+ * 独立于 versions（那是用户手动版本历史），覆盖简历以外的全部实体。
+ * 回灌时由 ca_business_row_guard 自动写入，敏感列已被 ca_safe_row_json 剔除。
+ *
+ * 0012 · 增加处理状态：pending → restored / dismissed。人工恢复时还会插入一条
+ * resolution='restore' 的 pending 快照，保存「被替换掉的当前版本」，因此恢复可来回切换。
+ * 这张表是纯本地审计数据，不进 change_log、不参与云端同步。
+ */
+export const conflictSnapshots = pgTable(
+  'conflict_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entity: text('entity').notNull(),
+    entityId: text('entity_id').notNull(),
+    /** remote_wins=远端覆盖本地；local_wins=本地胜出；restore=人工恢复时被换下的当前版本。 */
+    resolution: text('resolution', { enum: ['remote_wins', 'local_wins', 'restore'] }).notNull(),
+    winnerHlc: text('winner_hlc').notNull(),
+    loserHlc: text('loser_hlc').notNull(),
+    loserDeviceId: text('loser_device_id').notNull(),
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    status: text('status', { enum: ['pending', 'restored', 'dismissed'] })
+      .notNull()
+      .default('pending'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    /** 由哪条快照的恢复操作产生（仅 resolution='restore' 的留底行有值）。 */
+    restoredFrom: uuid('restored_from'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('conflict_snapshots_user_entity_idx').on(t.userId, t.entity, t.entityId, t.createdAt),
+    index('conflict_snapshots_user_status_idx').on(t.userId, t.status, t.createdAt),
+  ]
+);
+
+/**
+ * 0011 · tracker.payload.chat[] 的 append-only 投影。
+ * 前端与 BOSS 采集器仍写整块 jsonb，触发器按 (user, tracker, role+text+ts) 幂等
+ * 追加每条消息；将来合并两台设备的聊天记录按 dedupe_key 取并集，而不是整块 LWW。
+ */
+export const trackerChatEvents = pgTable(
+  'tracker_chat_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    trackerId: text('tracker_id').notNull(),
+    dedupeKey: text('dedupe_key').notNull().unique(),
+    message: jsonb('message').$type<Record<string, unknown>>().notNull(),
+    hlc: text('hlc').notNull(),
+    deviceId: text('device_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('tracker_chat_events_user_tracker_idx').on(t.userId, t.trackerId, t.createdAt)]
+);
+
 export const settings = pgTable('settings', {
   userId: uuid('user_id')
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
   payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
   updatedAt: updatedAt(),
+  ...syncCols(),
 });
 
 /**
@@ -358,6 +527,7 @@ export const aiConfigs = pgTable('ai_configs', {
   temperature: real('temperature').notNull().default(0.4),
   timeoutMs: integer('timeout_ms').notNull().default(60000),
   updatedAt: updatedAt(),
+  ...syncCols(),
 });
 
 /** P2b · AI 用量按账号 + 自然日累计（内测需要知道谁在用、用了多少次）。 */
@@ -390,6 +560,10 @@ export const schema = {
   interviewNotes,
   interviewKb,
   shareGrants,
+  attachments,
+  changeLog,
+  conflictSnapshots,
+  trackerChatEvents,
   settings,
   aiConfigs,
   aiUsage,
@@ -401,3 +575,7 @@ export type ApplicationRow = typeof applications.$inferSelect;
 export type PortfolioRow = typeof portfolios.$inferSelect;
 export type InterviewNoteRow = typeof interviewNotes.$inferSelect;
 export type InterviewKbRow = typeof interviewKb.$inferSelect;
+export type AttachmentRow = typeof attachments.$inferSelect;
+export type ChangeLogRow = typeof changeLog.$inferSelect;
+export type ConflictSnapshotRow = typeof conflictSnapshots.$inferSelect;
+export type TrackerChatEventRow = typeof trackerChatEvents.$inferSelect;

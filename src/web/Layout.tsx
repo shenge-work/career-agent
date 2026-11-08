@@ -12,6 +12,8 @@ const GROUPS: { title: string; items: { to: string; label: string; icon: string 
       { to: '/applications', label: '岗位', icon: '◈' },
       { to: '/portfolio', label: '作品集', icon: '▧' },
       { to: '/resumes', label: '简历库', icon: '▤' },
+      { to: '/attachments', label: '附件库', icon: '▣' },
+      { to: '/conflicts', label: '冲突恢复', icon: '⟲' },
       { to: '/companies', label: '公司档案', icon: '▦' },
       { to: '/tracker', label: '投递管理', icon: '⇄' },
     ],
@@ -68,96 +70,46 @@ export default function Layout({
     setCollapsed((prev) => ({ ...prev, [title]: !prev[title] }));
   }
 
+  // 所有菜单项平铺，去掉重复的总览（Logo 已经是总览入口）
+  const allItems = GROUPS.flatMap((g) => g.items).filter((n) => n.to !== '/');
+
   return (
     <div className="shell">
-      {/* 最左图标栏（Lessie icon rail）：只放 logo + 高频全局动作，不与侧栏菜单重复 */}
-      <nav className="icon-rail" aria-label="全局操作">
-        <NavLink to="/" title="回到首页" className={({ isActive }) => 'rail-icon-btn' + (isActive ? ' active' : '')}>
-          <span className="rail-logo" aria-hidden>
-            ◈
-          </span>
+      {/* 窄图标导航栏：只显示图标，悬停显示文字 */}
+      <nav className="icon-sidebar" aria-label="导航">
+        {/* Logo = 总览入口 */}
+        <NavLink to="/" data-tip="总览" className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}>
+          <span className="rail-logo" aria-hidden>◈</span>
         </NavLink>
-        <div className="rail-spacer" />
-        <button className="rail-icon-btn" title="退出登录" onClick={logout}>
-          ⎋
+
+        <div className="icon-side-divider" />
+
+        {/* 所有菜单项平铺 */}
+        {allItems.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            data-tip={n.label}
+            className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}
+          >
+            <span aria-hidden>{n.icon}</span>
+          </NavLink>
+        ))}
+
+        <div className="icon-side-spacer" />
+
+        {/* 底部：设置 + 退出 */}
+        <NavLink
+          to="/account"
+          data-tip="账号与设置"
+          className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}
+        >
+          <span aria-hidden>⚙</span>
+        </NavLink>
+        <button className="icon-side-btn" data-tip="退出登录" onClick={logout}>
+          <span aria-hidden>⎋</span>
         </button>
       </nav>
-
-      {/* 主侧栏（Lessie sidebar） */}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-name">CareerAgent</span>
-          <span className="spacer" />
-          <button className="sidebar-tool" title="搜索" aria-label="搜索">
-            ⌕
-          </button>
-        </div>
-        <div className="sidebar-menu">
-          {/* 新建简历：顶级动作（类比 Lessie「新建对话」） */}
-          <button
-            className="sidebar-new"
-            title="新建简历 ⌘K"
-            onClick={() => navigate('/resumes')}
-          >
-            <span className="sidebar-icon" aria-hidden>
-              ⊕
-            </span>
-            新建简历
-            <span className="sidebar-kbd" aria-hidden>
-              ⌘K
-            </span>
-          </button>
-
-          {/* 父子分组菜单 */}
-          {GROUPS.map((g) => {
-            const isCollapsed = collapsed[g.title];
-            return (
-              <div className="sidebar-group" key={g.title}>
-                <button
-                  className="sidebar-group-head"
-                  onClick={() => toggleGroup(g.title)}
-                  aria-expanded={!isCollapsed}
-                >
-                  <span>{g.title}</span>
-                  <span className={'chev' + (isCollapsed ? ' collapsed' : '')} aria-hidden>
-                    ⌄
-                  </span>
-                </button>
-                {!isCollapsed && (
-                  <div className="sidebar-group-body">
-                    {g.items.map((n) => (
-                      <NavLink
-                        key={n.to}
-                        to={n.to}
-                        className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}
-                      >
-                        <span className="sidebar-icon" aria-hidden>
-                          {n.icon}
-                        </span>
-                        {n.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 底部：账号与设置 + 说明 */}
-        <div className="sidebar-foot">
-          <NavLink
-            to="/account"
-            className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}
-          >
-            <span className="sidebar-icon" aria-hidden>
-              ⚙
-            </span>
-            账号与设置
-          </NavLink>
-          <div className="muted small">本地内测 · 数据按账号隔离</div>
-        </div>
-      </aside>
 
       {/* 内容区 */}
       <main className="content">

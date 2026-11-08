@@ -1,0 +1,22 @@
+name = "career-agent-sync"
+main = "src/index.ts"
+compatibility_date = "2026-11-08"
+# 账号标识（非密钥）：避免多账号环境下误部署到别的账号
+account_id = "ead07d9f00f8e2ac69055a81cc198382"
+
+# 只绑 1 个 D1（授权哈希 + 密文事件流）与 1 个 R2（已加密 blob）
+[[d1_databases]]
+binding = "DB"
+database_name = "career-agent-sync"
+database_id = "9970f317-1b20-4d47-be5c-137b69e6216d"
+
+[[r2_buckets]]
+binding = "BLOBS"
+bucket_name = "career-agent-sync-blobs"
+
+[vars]
+# 客户端与服务端协议版本必须一致；当前在 protocol.ts / transport.ts 内各自硬编码并做契约测试
+SYNC_PROTOCOL_VERSION = "1"
+
+# 部署后建议在 Cloudflare 控制台绑定自定义域名（workers.dev 境内访问不稳定），
+# 并把客户端 baseUrl 设为 https://<你的域名>；TLS 是 authKey 传输的前提。

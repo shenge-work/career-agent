@@ -4,6 +4,7 @@ import { ROLES, type Role } from '../../shared/constants';
 import { createDatabase } from './client';
 import { applyMigrations } from './migrate';
 import { users } from './schema';
+import { resolveDataDirs } from '../storage/paths';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf('--' + name);
@@ -22,7 +23,9 @@ async function main(): Promise<void> {
   if (password.length < 8) throw new Error('密码至少 8 位');
   if (!ROLES.includes(role)) throw new Error('role 只能是 admin 或 member');
 
-  const { db, client, close } = await createDatabase(process.env.PGDATA || './pgdata');
+  // 与 migrate / db.module 共用同一套解析：打包后 CAREER_AGENT_DATA_DIR 指向用户可写目录，
+  // 不能退回相对 CWD 的 ./pgdata，否则建号会写进签名只读目录。
+  const { db, client, close } = await createDatabase(resolveDataDirs().pgdata);
   try {
     await applyMigrations(client);
     const passwordHash = await hashPassword(password);

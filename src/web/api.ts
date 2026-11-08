@@ -108,6 +108,81 @@ export interface PortfolioDeployResult {
   publishedAt: number;
 }
 
+/** 本地附件：字节落内容寻址 blob 目录，PG 只存元数据（local-first，可同步）。 */
+export interface AttachmentItem {
+  id: string;
+  userId: string;
+  sha256: string;
+  mime: string;
+  bytes: number;
+  originalName: string;
+  ownerType: string | null;
+  ownerId: string | null;
+  syncState: 'local' | 'pending' | 'synced' | 'remote_only';
+  remoteKey: string | null;
+  hlc: string;
+  deviceId: string;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 同步 outbox 的一条增量，按 hlc 字典序游标拉取。 */
+export interface ChangeEntry {
+  id: string;
+  userId: string;
+  entity: string;
+  entityId: string;
+  op: 'upsert' | 'delete';
+  hlc: string;
+  deviceId: string;
+  payload: Record<string, any>;
+  createdAt: string;
+}
+
+export interface ChangesResponse {
+  changes: ChangeEntry[];
+  nextCursor: string;
+}
+
+/**
+ * 0011/0012 · 跨设备冲突留底：LWW 判定后落败方的整行原文。
+ * 纯本地审计数据，不进 change_log、不参与云端同步。
+ * resolution=restore 表示「人工恢复时被换下的当前版本」，仍可再次恢复，来回切换不丢改动。
+ */
+export interface ConflictSnapshot {
+  id: string;
+  userId: string;
+  entity: string;
+  entityId: string;
+  resolution: 'remote_wins' | 'local_wins' | 'restore';
+  status: 'pending' | 'restored' | 'dismissed';
+  winnerHlc: string;
+  loserHlc: string;
+  loserDeviceId: string;
+  snapshot: Record<string, any>;
+  restoredFrom: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+/** 恢复结果：这是一次新的本地写，带回服务端重新领取的 HLC 与当前版本留底 id。 */
+export interface ConflictRestoreResult {
+  ok: true;
+  entity: string;
+  entityId: string;
+  hlc: string;
+  deviceId: string;
+  backupSnapshotId: string | null;
+  restoredTitle: string | null;
+}
+
+export const restoreConflict = (id: string) =>
+  post<ConflictRestoreResult>(`/sync/conflicts/${encodeURIComponent(id)}/restore`);
+
+export const dismissConflict = (id: string) =>
+  del<{ ok: true; status: 'dismissed' }>(`/sync/conflicts/${encodeURIComponent(id)}`);
+
 export interface UserRow {
   id: string;
   email: string;
@@ -265,12 +340,14 @@ export interface KbAskResult {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // 没有请求体时绝不声明 JSON Content-Type：Fastify 会对「声明了 JSON 却是空 body」
   // 的 DELETE / POST 直接回 400（Body cannot be empty），曾让「停用 AI 配置」按钮失效。
+  // FormData 也必须不声明 Content-Type：浏览器要自己生成带 boundary 的 multipart 头。
   const hasBody = init.body !== undefined && init.body !== null;
+  const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
   const res = await fetch('/api' + path, {
     ...init,
     credentials: 'include',
     headers: {
-      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(hasBody && !isForm ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers || {}),
     },
   });
@@ -304,6 +381,27 @@ export const put = <T>(path: string, body?: unknown) =>
   api<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) });
 
 export const del = <T>(path: string) => api<T>(path, { method: 'DELETE' });
+
+/** 附件字节流：图片 / PDF 可 inline 预览，其余由服务端强制下载 + CSP sandbox。 */
+export const attachmentRawUrl = (id: string) =>
+  `/api/attachments/${encodeURIComponent(id)}/raw`;
+
+/** multipart 上传（字段名 file）；归属走 query。切勿手动设置 Content-Type。 */
+export function uploadAttachment(
+  file: File,
+  owner: { ownerType?: string; ownerId?: string } = {}
+): Promise<AttachmentItem> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const qs = new URLSearchParams();
+  if (owner.ownerType) qs.set('ownerType', owner.ownerType);
+  if (owner.ownerId) qs.set('ownerId', owner.ownerId);
+  const suffix = qs.toString();
+  return api<AttachmentItem>(`/attachments${suffix ? '?' + suffix : ''}`, {
+    method: 'POST',
+    body: fd,
+  });
+}
 
 /** PDF 下载地址：vector=Chrome 原生打印（文字可选中），image=v1 截图管线（精确分页）。 */
 export const pdfUrl = (id: string, mode: 'vector' | 'image' = 'vector') =>

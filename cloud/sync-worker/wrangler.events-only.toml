@@ -1,0 +1,16 @@
+# 临时部署配置（联调用）：R2 订阅尚未开通时先验证 D1 事件通道。
+# R2 桶创建后请删除本文件，改用主 wrangler.toml 重新部署。
+name = "career-agent-sync"
+main = "src/index.ts"
+compatibility_date = "2026-11-08"
+account_id = "ead07d9f00f8e2ac69055a81cc198382"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "career-agent-sync"
+database_id = "9970f317-1b20-4d47-be5c-137b69e6216d"
+# 本地 Worker 运行时 + 真实远程 D1（wrangler dev 的 remote bindings）
+remote = true
+
+[vars]
+SYNC_PROTOCOL_VERSION = "1"

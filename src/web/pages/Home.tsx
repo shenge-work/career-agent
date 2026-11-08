@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { api, fmtTime, type ApplicationItem, type ResumeItem } from '../api';
+import { api, fmtTime, type ApplicationItem, type CompanyItem, type ResumeItem } from '../api';
 
 const STATUS_LABEL: Record<ApplicationItem['status'], string> = {
   interested: '有意向',
@@ -29,6 +29,10 @@ export default function Home() {
   const { data: resumes = [] } = useQuery({
     queryKey: ['resumes'],
     queryFn: () => api<ResumeItem[]>('/resumes'),
+  });
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => api<CompanyItem[]>('/companies'),
   });
 
   const master = resumes.find((r) => r.isMaster);
@@ -70,10 +74,11 @@ export default function Home() {
         <>
           {/* 关键指标卡片 */}
           <div className="dash-stats">
-            <StatCard label="进行中岗位" value={active.length} hint="未结束的机会" tone="blue" />
+            <StatCard label="总投递" value={apps.length} hint="全部岗位" tone="blue" />
+            <StatCard label="进行中" value={active.length} hint="未结束的机会" tone="blue" />
             <StatCard label="面试中" value={interviewing.length} hint="需要准备" tone="amber" />
             <StatCard label="已录用" value={offered.length} hint="拿到 Offer" tone="green" />
-            <StatCard label="主简历" value={master ? 1 : 0} hint={master ? master.title : '尚未设置'} tone="gray" />
+            <StatCard label="已拒绝" value={apps.filter(a => a.status === 'rejected').length} hint="未通过" tone="red" />
           </div>
 
           {/* 该跟进了 */}
@@ -117,18 +122,29 @@ export default function Home() {
           <div className="dash-cols">
             {/* 最近岗位 */}
             <section className="dash-card">
-              <div className="dash-card-title">最近岗位</div>
+              <div className="dash-card-title">
+                最近岗位
+                <Link to="/applications" className="dash-card-more">查看全部 →</Link>
+              </div>
               {recent.length ? (
                 <ul className="dash-list">
-                  {recent.map((a) => (
-                    <li key={a.id}>
-                      <Link to="/applications" className="dash-link">
-                        <span className="dash-link-main">{a.position}</span>
-                        <span className="chip">{STATUS_LABEL[a.status]}</span>
-                      </Link>
-                      <div className="muted small">{fmtTime(a.updatedAt)}</div>
-                    </li>
-                  ))}
+                  {recent.map((a) => {
+                    const company = companies.find((c) => c.id === a.companyId);
+                    const salary = (a.payload?.salary as string) || '';
+                    return (
+                      <li key={a.id}>
+                        <Link to="/applications" className="dash-link">
+                          <span className="dash-link-main">{a.position}</span>
+                          <span className={`chip status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
+                        </Link>
+                        <div className="muted small dash-meta">
+                          {company && <span className="dash-company">{company.name}</span>}
+                          {salary && <span className="dash-salary">{salary}</span>}
+                          <span className="dash-time">{fmtTime(a.updatedAt)}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="muted small">
@@ -185,7 +201,7 @@ function StatCard({
   label: string;
   value: number;
   hint: string;
-  tone: 'blue' | 'amber' | 'green' | 'gray';
+  tone: 'blue' | 'amber' | 'green' | 'gray' | 'red';
 }) {
   return (
     <div className={`stat-card ${tone}`}>

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDatabase } from './client';
+import { resolveDataDirs } from '../storage/paths';
 
 export interface MigrationClient {
   exec: (sql: string) => Promise<any>;
@@ -39,14 +40,14 @@ export async function applyMigrations(client: MigrationClient): Promise<string[]
 }
 
 async function main(): Promise<void> {
-  const dataDir = process.env.PGDATA || './pgdata';
-  const { client, close } = await createDatabase(dataDir);
+  const { pgdata, root } = resolveDataDirs();
+  const { client, close } = await createDatabase(pgdata);
   try {
     const done = await applyMigrations(client);
     console.log(
       done.length ? `已应用迁移: ${done.join(', ')}` : '数据库已是最新，无待应用迁移'
     );
-    console.log(`数据目录: ${path.resolve(dataDir)}`);
+    console.log(`数据目录: ${root}（pgdata + blobs）`);
   } finally {
     await close();
   }

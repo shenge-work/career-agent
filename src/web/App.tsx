@@ -8,11 +8,16 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Library from './pages/Library';
 import Applications from './pages/Applications';
+import ApplicationDetailPage from './pages/ApplicationDetailPage';
 import Portfolio from './pages/Portfolio';
 import Companies from './pages/Companies';
+import CompanyDetailPage from './pages/CompanyDetailPage';
 import TrackerPage from './pages/Tracker';
+import TrackerDetailPage from './pages/TrackerDetailPage';
 import Account from './pages/Account';
 import AiPlayground from './pages/AiPlayground';
+import Attachments from './pages/Attachments';
+import Conflicts from './pages/Conflicts';
 import Kb from './pages/Kb';
 import Editor from './pages/Editor';
 
@@ -67,11 +72,16 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/applications" element={<Applications />} />
+          <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/resumes" element={<Library />} />
+          <Route path="/attachments" element={<Attachments />} />
+          <Route path="/conflicts" element={<Conflicts />} />
           <Route path="/editor/:id" element={<Editor />} />
           <Route path="/companies" element={<Companies />} />
+          <Route path="/companies/:id" element={<CompanyDetailPage />} />
           <Route path="/tracker" element={<TrackerPage />} />
+          <Route path="/tracker/:id" element={<TrackerDetailPage />} />
           <Route path="/account" element={<Account user={data.user} />} />
           <Route path="/ai" element={<AiPlayground />} />
           <Route path="/kb" element={<Kb />} />
