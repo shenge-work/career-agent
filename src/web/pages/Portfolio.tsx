@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   api,
   del,
@@ -77,6 +78,7 @@ export default function Portfolio() {
   const [form, setForm] = useState({ title: '', templateId: 'minimal' });
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const PAGE_SIZE = 10;
 
   const { data: items = [], isLoading } = useQuery({
@@ -173,9 +175,7 @@ export default function Portfolio() {
                         </button>
                         <button
                           className="mini danger"
-                          onClick={() => {
-                            if (window.confirm(`确认删除作品集「${p.title}」？`)) deleteM.mutate(p.id);
-                          }}
+                          onClick={() => setDeleteTargetId(p.id)}
                         >
                           删除
                         </button>
@@ -219,6 +219,23 @@ export default function Portfolio() {
           )}
         </aside>
       </div>
+
+      <ConfirmModal
+        open={deleteTargetId !== null}
+        title="删除作品集"
+        message={
+          deleteTargetId
+            ? `确认删除作品集「${items.find((it) => it.id === deleteTargetId)?.title}」？此操作不可撤销。`
+            : ''
+        }
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          if (deleteTargetId) deleteM.mutate(deleteTargetId);
+          setDeleteTargetId(null);
+        }}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </>
   );
 }

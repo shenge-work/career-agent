@@ -2,6 +2,7 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, del, fmtTime, post, put, type CompanyItem, type JdItem, type ReferralItem } from '../api';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   buildBrief,
   dimensionCoverage,
@@ -14,6 +15,7 @@ import {
   careersUrlOf,
   normalizeReferral,
   referralEntryUrlOf,
+  referralTitle,
   statusMeta,
 } from '../referrals';
 
@@ -39,6 +41,8 @@ export default function CompanyDetailPage() {
   const [careersDraft, setCareersDraft] = useState<string | null>(null);
   const [referralDraft, setReferralDraft] = useState<string | null>(null);
   const [quickRef, setQuickRef] = useState({ referrer: '', position: '', channel: '', status: 'pending' });
+  const [deleteCompanyOpen, setDeleteCompanyOpen] = useState(false);
+  const [deleteReferralId, setDeleteReferralId] = useState<string | null>(null);
 
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ['companies'],
@@ -191,9 +195,7 @@ export default function CompanyDetailPage() {
           </button>
           <button
             className="mini danger"
-            onClick={() => {
-              if (window.confirm(`确认删除「${company.name}」及其岗位 JD？`)) deleteM.mutate(company.id);
-            }}
+            onClick={() => setDeleteCompanyOpen(true)}
           >
             删除公司
           </button>
@@ -435,10 +437,7 @@ export default function CompanyDetailPage() {
                     {r.referralCode && <span className="tag">内推码 {r.referralCode}</span>}
                     <button
                       className="mini danger"
-                      onClick={() => {
-                        if (window.confirm(`确认删除「${r.position || r.referrer || '这条内推'}」？`))
-                          deleteReferralM.mutate(row.id);
-                      }}
+                      onClick={() => setDeleteReferralId(row.id)}
                     >
                       删除
                     </button>
@@ -571,6 +570,36 @@ export default function CompanyDetailPage() {
           <p className="muted small">暂无岗位 JD。</p>
         )}
       </section>
+
+      <ConfirmModal
+        open={deleteCompanyOpen}
+        title="删除公司"
+        message={`确认删除「${company.name}」及其全部岗位 JD？此操作不可撤销。`}
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          deleteM.mutate(company.id);
+          setDeleteCompanyOpen(false);
+        }}
+        onCancel={() => setDeleteCompanyOpen(false)}
+      />
+
+      <ConfirmModal
+        open={deleteReferralId !== null}
+        title="删除内推"
+        message={
+          deleteReferralId
+            ? `确认删除「${(() => { const hit = referralList.find((x) => x.row.id === deleteReferralId); return hit ? referralTitle(hit.ref) : '这条内推'; })()}」？此操作不可撤销。`
+            : ''
+        }
+        confirmLabel="删除"
+        busy={deleteReferralM.isPending}
+        onConfirm={() => {
+          if (deleteReferralId) deleteReferralM.mutate(deleteReferralId);
+          setDeleteReferralId(null);
+        }}
+        onCancel={() => setDeleteReferralId(null)}
+      />
     </div>
   );
 }

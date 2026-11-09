@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   api,
   del,
@@ -91,6 +92,7 @@ export default function ApplicationDetailPage() {
   const [match, setMatch] = useState<MatchResult | null>(null);
   const [matchError, setMatchError] = useState('');
   const [derivedId, setDerivedId] = useState<string | null>(null);
+  const [deleteAppOpen, setDeleteAppOpen] = useState(false);
 
   const { data: app, isLoading } = useQuery({
     queryKey: ['application', id],
@@ -250,9 +252,7 @@ export default function ApplicationDetailPage() {
         <div className="detail-nav-actions">
           <button
             className="mini danger"
-            onClick={() => {
-              if (window.confirm(`确认删除岗位「${app.position}」？`)) deleteM.mutate();
-            }}
+            onClick={() => setDeleteAppOpen(true)}
           >
             删除岗位
           </button>
@@ -506,6 +506,19 @@ export default function ApplicationDetailPage() {
           <p className="muted small">{app.payload.note}</p>
         </section>
       )}
+
+      <ConfirmModal
+        open={deleteAppOpen}
+        title="删除岗位"
+        message={`确认删除「${app.position}」？此操作不可撤销。`}
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          deleteM.mutate();
+          setDeleteAppOpen(false);
+        }}
+        onCancel={() => setDeleteAppOpen(false)}
+      />
     </div>
   );
 }
@@ -515,6 +528,7 @@ function InterviewNotes({ app }: { app: ApplicationItem }) {
   const [noteError, setNoteError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ round: '', transcript: '' });
+  const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
 
   const { data: notes = [] } = useQuery({
     queryKey: ['interview-notes', app.id],
@@ -587,9 +601,7 @@ function InterviewNotes({ app }: { app: ApplicationItem }) {
                 </button>
                 <button
                   className="mini danger"
-                  onClick={() => {
-                    if (window.confirm('确认删除这条面试记录？')) deleteM.mutate(n.id);
-                  }}
+                  onClick={() => setDeleteNoteId(n.id)}
                 >
                   删除
                 </button>
@@ -658,6 +670,19 @@ function InterviewNotes({ app }: { app: ApplicationItem }) {
           <button className="mini" onClick={() => setShowForm(true)}>+ 记一轮面试</button>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteNoteId !== null}
+        title="删除面试记录"
+        message="确认删除这条面试记录？此操作不可撤销。"
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          if (deleteNoteId) deleteM.mutate(deleteNoteId);
+          setDeleteNoteId(null);
+        }}
+        onCancel={() => setDeleteNoteId(null)}
+      />
     </div>
   );
 }

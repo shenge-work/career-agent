@@ -26,8 +26,9 @@
   --line: #242424;
   --text: rgba(var(--_ivory-light), 1);
   --muted: rgba(var(--_ivory-light), 0.55);
-  --faint: rgba(var(--_ivory-light), 0.32);
+  --faint: rgba(var(--_ivory-light), 0.55);
   --accent: rgba(var(--_indigo), 1);
+  --brand-text: rgba(var(--_link-blue), 1);
   --accent-soft: rgba(var(--_indigo), 0.18);
   --success: rgba(var(--_teal), 1);
   --danger: rgba(var(--_coral), 1);
@@ -48,9 +49,9 @@
   --_ivory-medium: 55, 65, 81;
   --_indigo: 54, 69, 217;
   --_link-blue: 37, 99, 235;
-  --_teal: 13, 148, 136;
+  --_teal: 10, 130, 120;
   --_coral: 220, 38, 38;
-  --_amber: 180, 120, 20;
+  --_amber: 160, 105, 15;
 
   --bg: #f7f7f5;
   --surface: #ffffff;
@@ -60,8 +61,9 @@
   --line: #e8e8e5;
   --text: rgba(var(--_ivory-light), 1);
   --muted: rgba(var(--_ivory-light), 0.62);
-  --faint: rgba(var(--_ivory-light), 0.4);
+  --faint: rgba(var(--_ivory-light), 0.62);
   --accent: rgba(var(--_indigo), 1);
+  --brand-text: rgba(var(--_link-blue), 1);
   --accent-soft: rgba(var(--_indigo), 0.12);
   --success: rgba(var(--_teal), 1);
   --danger: rgba(var(--_coral), 1);
@@ -79,8 +81,35 @@
 }
 
 * { box-sizing: border-box; }
+
+/* 可访问性：统一的键盘焦点环（WCAG 2.4.7）。
+   覆盖各处为视觉统一而设的 outline:none，确保键盘用户始终可见焦点。 */
+:focus-visible {
+  outline: 2px solid rgba(var(--_indigo), 1);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* 亮色主题下焦点环对比度增强 */
+:root[data-theme='light'] :focus-visible {
+  outline-color: #2f3fd1;
+}
+
 html, body { background: var(--bg); }
 body { margin: 0; color: var(--text); }
+
+/* 可访问性：没加 class 的行内链接统一走品牌链接色。
+   否则会落回浏览器默认蓝 #0000EE（访问过的还是 #551A8B），
+   在暗色 surface 上对比度只有 1.96:1 / 1.67:1，正文里几乎读不出来；
+   改用 --brand-text 后暗色 7.54:1、亮色 5.17:1，满足 WCAG AA。 */
+a:not([class]) {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+a:not([class]):hover {
+  text-decoration-thickness: 2px;
+}
 h1, h2 { font-weight: 500; margin: 0; }
 h1 { font-size: 22px; }
 h2 { font-size: 15px; }
@@ -302,10 +331,14 @@ button.ghost:hover { background: var(--surface-2); }
 /* ------------------------------------------------- Lessie 三层布局骨架 */
 .shell {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
+  transition: grid-template-columns 0.2s ease;
+}
+.shell.rail-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 /* 窄图标导航栏（合并后的单栏） */
@@ -344,6 +377,24 @@ button.ghost:hover { background: var(--surface-2); }
   margin-bottom: 0;
   background: var(--accent);
 }
+.icon-side-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 4px;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-side-toggle:hover { background: var(--surface-2); color: var(--text); }
 .icon-side-divider {
   width: 32px;
   height: 1px;
@@ -431,6 +482,8 @@ button.ghost:hover { background: var(--surface-2); }
   background: var(--bg);
   min-height: 0;
   overflow: hidden;
+  width: 220px;
+  flex-shrink: 0;
 }
 .sidebar-brand {
   display: flex;
@@ -443,6 +496,23 @@ button.ghost:hover { background: var(--surface-2); }
 }
 .sidebar-brand .spacer { flex: 1; }
 .brand-name { font-weight: 600; }
+/* 侧栏折叠/展开切换按钮（宽↔窄） */
+.rail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+}
+.rail-toggle:hover { background: var(--surface-2); color: var(--text); }
 .sidebar-tool {
   display: flex;
   align-items: center;
@@ -541,7 +611,7 @@ button.ghost:hover { background: var(--surface-2); }
   color: var(--text);
   font-weight: 500;
 }
-.sidebar-link.active .sidebar-icon { opacity: 1; color: var(--accent); }
+.sidebar-link.active .sidebar-icon { opacity: 1; color: var(--brand-text); }
 .sidebar-foot {
   display: flex;
   flex-direction: column;
@@ -1480,7 +1550,7 @@ code {
 }
 .home-suggestion-text { color: var(--muted); }
 .home-foot { margin-top: 40px; font-size: 12px; color: var(--faint); }
-.home-foot a { color: var(--accent); text-decoration: none; }
+.home-foot a { color: var(--brand-text); text-decoration: none; }
 .home-foot a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------- 岗位（applications） */
@@ -1586,7 +1656,7 @@ pre.pitch-text { font-family: inherit; }
   margin-bottom: 16px;
 }
 .dash-card-title { font-size: 13px; font-weight: 500; margin-bottom: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; }
-.dash-card-more { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 400; }
+.dash-card-more { font-size: 12px; color: var(--brand-text); text-decoration: none; font-weight: 400; }
 .dash-card-more:hover { text-decoration: underline; }
 .dash-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .dash-cols .dash-card { margin-bottom: 0; }
@@ -1602,7 +1672,7 @@ pre.pitch-text { font-family: inherit; }
 .dash-list li { padding: 10px 0; border-top: 1px solid var(--line); }
 .dash-list li:first-child { border-top: none; }
 .dash-link { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-decoration: none; color: var(--text); }
-.dash-link:hover .dash-link-main { color: var(--accent); }
+.dash-link:hover .dash-link-main { color: var(--brand-text); }
 .dash-link-main { font-size: 13px; font-weight: 500; }
 .dash-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 11px; }
 .dash-company { color: var(--muted); }
@@ -1619,7 +1689,7 @@ pre.pitch-text { font-family: inherit; }
 
 .dash-next { list-style: none; margin: 0; padding: 0; }
 .dash-next li { padding: 8px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
-.dash-next li a { color: var(--accent); text-decoration: none; }
+.dash-next li a { color: var(--brand-text); text-decoration: none; }
 .dash-next li b { color: var(--text); font-weight: 600; }
 
 /* 跟进提醒卡片：琥珀色左边框强调 */
@@ -1686,20 +1756,27 @@ pre.pitch-text { font-family: inherit; }
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  text-decoration: none;
-  color: var(--text);
   transition: border-color 0.15s, transform 0.15s;
 }
 .job-card:hover {
   border-color: var(--muted);
   transform: translateY(-2px);
 }
-.job-card * {
+/* 卡片主体：承担跳转的可点击链接，填充整卡除删除按钮外的区域 */
+.job-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  padding-right: 48px;
+  text-decoration: none;
+  color: var(--text);
+  border-radius: 12px;
+}
+.job-card-link * {
   text-decoration: none;
   color: inherit;
 }
@@ -1712,12 +1789,12 @@ pre.pitch-text { font-family: inherit; }
   font-size: 11px;
   font-weight: 500;
 }
-.job-card-status.status-interested { background: rgba(var(--_gray), 0.2); color: var(--muted); }
-.job-card-status.status-applied { background: rgba(var(--_blue), 0.15); color: rgba(var(--_blue), 1); }
+.job-card-status.status-interested { background: rgba(var(--_steel-medium), 0.28); color: var(--muted); }
+.job-card-status.status-applied { background: rgba(var(--_link-blue), 0.15); color: rgba(var(--_link-blue), 1); }
 .job-card-status.status-interviewing { background: rgba(var(--_amber), 0.15); color: rgba(var(--_amber), 1); }
-.job-card-status.status-offered { background: rgba(var(--_green), 0.15); color: rgba(var(--_green), 1); }
-.job-card-status.status-rejected { background: rgba(var(--_red), 0.15); color: rgba(var(--_red), 1); }
-.job-card-status.status-withdrawn { background: rgba(var(--_gray), 0.15); color: var(--muted); }
+.job-card-status.status-offered { background: rgba(var(--_teal), 0.15); color: rgba(var(--_teal), 1); }
+.job-card-status.status-rejected { background: rgba(var(--_coral), 0.15); color: rgba(var(--_coral), 1); }
+.job-card-status.status-withdrawn { background: rgba(var(--_steel-medium), 0.28); color: var(--muted); }
 
 .job-card-title {
   font-size: 15px;
@@ -1747,26 +1824,29 @@ pre.pitch-text { font-family: inherit; }
   position: absolute;
   bottom: 12px;
   right: 12px;
-  width: 20px;
-  height: 20px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
-.job-card:hover .job-card-delete {
+.job-card:hover .job-card-delete,
+.job-card-delete:focus-visible {
   opacity: 1;
 }
-.job-card-delete:hover {
-  background: rgba(var(--_red), 0.15);
-  color: rgba(var(--_red), 1);
+.job-card-delete:hover,
+.job-card-delete:focus-visible {
+  background: rgba(var(--_coral), 0.15);
+  color: rgba(var(--_coral), 1);
 }
 
 /* 分页 */
@@ -1839,6 +1919,15 @@ pre.pitch-text { font-family: inherit; }
   text-decoration: none;
   color: inherit;
 }
+/* 卡片主体链接：占据除右侧操作区外的空间，避免 Link 内嵌 button 的非法嵌套 */
+.app-card-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
 .app-card-main {
   flex: 1;
   min-width: 0;
@@ -1884,7 +1973,7 @@ pre.pitch-text { font-family: inherit; }
   margin-bottom: 20px;
 }
 .detail-back {
-  color: var(--accent);
+  color: var(--brand-text);
   text-decoration: none;
   font-size: 13px;
 }
@@ -2087,7 +2176,7 @@ pre.pitch-text { font-family: inherit; }
   display: inline-block;
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--brand-text);
   margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2408,7 +2497,7 @@ pre.pitch-text { font-family: inherit; }
   font-size: 12px;
 }
 .ref-card-links .tag { margin-left: 0; }
-.ref-card-links a { color: var(--accent); text-decoration: none; }
+.ref-card-links a { color: var(--brand-text); text-decoration: none; }
 .ref-card-links a:hover { text-decoration: underline; }
 
 .ref-card-foot {

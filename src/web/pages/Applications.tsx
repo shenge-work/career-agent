@@ -1,6 +1,7 @@
 import { useState, useMemo, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   api,
   del,
@@ -38,6 +39,7 @@ export default function Applications() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [deleteTarget, setDeleteTarget] = useState<ApplicationItem | null>(null);
 
   const { data: apps = [], isLoading } = useQuery({
     queryKey: ['applications'],
@@ -158,31 +160,27 @@ export default function Applications() {
             const company = a.companyId ? companies.find((c) => c.id === a.companyId) : null;
             const salary = (a.payload?.salary as string) || '';
             return (
-              <Link
-                key={a.id}
-                to={`/applications/${a.id}`}
-                className="job-card"
-              >
-                <div className={`job-card-status status-${a.status}`}>
-                  {STATUS_LABEL[a.status]}
-                </div>
-                <div className="job-card-title">{a.position}</div>
-                <div className="job-card-company">{company?.name || '—'}</div>
-                <div className="job-card-meta">
-                  {salary && <span className="job-card-salary">{salary}</span>}
-                  <span className="job-card-time">{fmtTime(a.updatedAt)}</span>
-                </div>
+              <div key={a.id} className="job-card">
+                <Link to={`/applications/${a.id}`} className="job-card-link" aria-label={`查看岗位 ${a.position}`}>
+                  <div className={`job-card-status status-${a.status}`}>
+                    {STATUS_LABEL[a.status]}
+                  </div>
+                  <div className="job-card-title">{a.position}</div>
+                  <div className="job-card-company">{company?.name || '—'}</div>
+                  <div className="job-card-meta">
+                    {salary && <span className="job-card-salary">{salary}</span>}
+                    <span className="job-card-time">{fmtTime(a.updatedAt)}</span>
+                  </div>
+                </Link>
                 <button
                   className="job-card-delete"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (window.confirm(`确认删除「${a.position}」？`)) deleteM.mutate(a.id);
-                  }}
+                  aria-label={`删除岗位 ${a.position}`}
+                  title="删除"
+                  onClick={() => setDeleteTarget(a)}
                 >
                   ×
                 </button>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -210,6 +208,19 @@ export default function Applications() {
           </button>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="删除岗位"
+        message={deleteTarget ? `确认删除「${deleteTarget.position}」？此操作不可撤销。` : ''}
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          if (deleteTarget) deleteM.mutate(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

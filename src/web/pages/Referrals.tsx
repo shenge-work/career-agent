@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, del, fmtTime, post, put, type CompanyItem, type ReferralItem } from '../api';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   followUpInfo,
   isActiveReferral,
@@ -89,6 +90,7 @@ export default function Referrals() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [note, setNote] = useState('');
 
   const { data: rows = [], isLoading } = useQuery({
@@ -518,10 +520,7 @@ export default function Referrals() {
                     <button
                       className="mini danger"
                       type="button"
-                      onClick={() => {
-                        const title = selected ? referralTitle(selected.ref) : '这条内推';
-                        if (window.confirm(`确认删除「${title}」？`)) deleteM.mutate(selectedId);
-                      }}
+                      onClick={() => setDeleteOpen(true)}
                     >
                       删除
                     </button>
@@ -601,6 +600,19 @@ export default function Referrals() {
           ) : null}
         </div>
       </div>
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="删除内推"
+        message={`确认删除「${selected ? referralTitle(selected.ref) : '这条内推'}」？此操作不可撤销。`}
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          if (selectedId) deleteM.mutate(selectedId);
+          setDeleteOpen(false);
+        }}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </>
   );
 }

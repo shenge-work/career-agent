@@ -47,7 +47,27 @@ export default function Layout({
   // 默认展开所有分组
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [accountOpen, setAccountOpen] = useState(false);
+  // 侧栏模式：false = 宽文字侧栏（默认），true = 窄图标栏
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ca.sidebar.collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const accountRef = useRef<HTMLDivElement>(null);
+
+  function toggleRail() {
+    setRailCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('ca.sidebar.collapsed', next ? '1' : '0');
+      } catch {
+        /* 忽略存储失败 */
+      }
+      return next;
+    });
+  }
 
   // 点击外部关闭账户菜单
   useEffect(() => {
@@ -59,6 +79,16 @@ export default function Layout({
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
+
+  // Escape 关闭账户菜单（可访问性）
+  useEffect(() => {
+    if (!accountOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAccountOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [accountOpen]);
 
   async function logout() {
     try {
@@ -76,42 +106,119 @@ export default function Layout({
   const allItems = GROUPS.flatMap((g) => g.items).filter((n) => n.to !== '/');
 
   return (
-    <div className="shell">
-      {/* 窄图标导航栏：只显示图标，悬停显示文字 */}
-      <nav className="icon-sidebar" aria-label="导航">
-        {/* Logo = 总览入口 */}
-        <NavLink to="/" data-tip="总览" className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}>
-          <span className="rail-logo" aria-hidden>◈</span>
-        </NavLink>
+    <div className={'shell' + (railCollapsed ? ' rail-collapsed' : '')}>
+      {railCollapsed ? (
+        /* 窄图标导航栏：只显示图标，悬停显示文字 */
+        <nav className="icon-sidebar" aria-label="导航">
+          <button
+            className="icon-side-toggle"
+            onClick={toggleRail}
+            data-tip="展开侧栏"
+            aria-label="展开侧栏"
+            title="展开侧栏"
+          >
+            <span aria-hidden>»</span>
+          </button>
 
-        <div className="icon-side-divider" />
+          {/* Logo = 总览入口 */}
+          <NavLink to="/" data-tip="总览" aria-label="总览" className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}>
+            <span className="rail-logo" aria-hidden>◈</span>
+          </NavLink>
 
-        {/* 所有菜单项平铺 */}
-        {allItems.map((n) => (
+          <div className="icon-side-divider" />
+
+          {/* 所有菜单项平铺 */}
+          {allItems.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              data-tip={n.label}
+              aria-label={n.label}
+              className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}
+            >
+              <span aria-hidden>{n.icon}</span>
+            </NavLink>
+          ))}
+
+          <div className="icon-side-spacer" />
+
+          {/* 底部：设置 + 退出 */}
           <NavLink
-            key={n.to}
-            to={n.to}
-            data-tip={n.label}
+            to="/account"
+            data-tip="账号与设置"
+            aria-label="账号与设置"
             className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}
           >
-            <span aria-hidden>{n.icon}</span>
+            <span aria-hidden>⚙</span>
           </NavLink>
-        ))}
+          <button className="icon-side-btn" data-tip="退出登录" aria-label="退出登录" onClick={logout}>
+            <span aria-hidden>⎋</span>
+          </button>
+        </nav>
+      ) : (
+        /* 宽文字侧栏：分组标题 + 文字菜单，可折叠为窄图标栏 */
+        <nav className="sidebar" aria-label="主导航">
+          <div className="sidebar-brand">
+            <NavLink to="/" aria-label="总览" className="brand-mark" style={{ textDecoration: 'none' }}>◈</NavLink>
+            <span className="brand-name">CareerAgent</span>
+            <span className="spacer" />
+            <button
+              className="rail-toggle"
+              onClick={toggleRail}
+              aria-label="折叠侧栏"
+              title="折叠侧栏"
+            >
+              <span aria-hidden>«</span>
+            </button>
+          </div>
 
-        <div className="icon-side-spacer" />
+          <div className="sidebar-menu">
+            {GROUPS.map((group) => {
+              const isCollapsed = !!collapsed[group.title];
+              return (
+                <div key={group.title} className="sidebar-group">
+                  <button
+                    className="sidebar-group-head"
+                    onClick={() => toggleGroup(group.title)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <span>{group.title}</span>
+                    <span className={'chev' + (isCollapsed ? ' collapsed' : '')} aria-hidden>▾</span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="sidebar-group-body">
+                      {group.items.map((n) => (
+                        <NavLink
+                          key={n.to}
+                          to={n.to}
+                          className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}
+                        >
+                          <span className="sidebar-icon" aria-hidden>{n.icon}</span>
+                          <span>{n.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-        {/* 底部：设置 + 退出 */}
-        <NavLink
-          to="/account"
-          data-tip="账号与设置"
-          className={({ isActive }) => 'icon-side-btn' + (isActive ? ' active' : '')}
-        >
-          <span aria-hidden>⚙</span>
-        </NavLink>
-        <button className="icon-side-btn" data-tip="退出登录" onClick={logout}>
-          <span aria-hidden>⎋</span>
-        </button>
-      </nav>
+          <div className="sidebar-foot">
+            <NavLink
+              to="/account"
+              className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}
+            >
+              <span className="sidebar-icon" aria-hidden>⚙</span>
+              <span>账号与设置</span>
+            </NavLink>
+            <button className="sidebar-link" onClick={logout} style={{ width: '100%', background: 'transparent', textAlign: 'left' }}>
+              <span className="sidebar-icon" aria-hidden>⎋</span>
+              <span>退出登录</span>
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* 内容区 */}
       <main className="content">
@@ -127,7 +234,7 @@ export default function Layout({
               <span className="avatar">{initials(user.email)}</span>
             </button>
             {accountOpen && (
-              <div className="account-pop" role="menu">
+              <div className="account-pop" role="menu" aria-label="账号菜单">
                 <div className="account-head">
                   <span className="avatar lg">{initials(user.email)}</span>
                   <div className="account-id">

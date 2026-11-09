@@ -10,6 +10,7 @@ import {
   type ResumeItem,
   type VersionItem,
 } from '../api';
+import ConfirmModal from '../components/ConfirmModal';
 
 function sectionsOf(p: Record<string, any> | null | undefined): any[] {
   if (!p) return [];
@@ -116,6 +117,7 @@ export default function Library() {
   const [jdResult, setJdResult] = useState<any>(null);
   const [jdParsed, setJdParsed] = useState<JdParseResult | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [restoreVersionId, setRestoreVersionId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'updated' | 'title'>('updated');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -554,11 +556,7 @@ export default function Library() {
                         <button
                           className="mini"
                           disabled={restoreM.isPending}
-                          onClick={() => {
-                            if (window.confirm('恢复到这个版本？当前内容会先自动存为新版本，不会丢失。')) {
-                              restoreM.mutate(v.id);
-                            }
-                          }}
+                          onClick={() => setRestoreVersionId(v.id)}
                         >
                           恢复
                         </button>
@@ -591,6 +589,20 @@ export default function Library() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={restoreVersionId !== null}
+        title="恢复版本"
+        message="恢复到这个版本？当前内容会先自动存为新版本，不会丢失。"
+        confirmLabel="恢复"
+        danger={false}
+        busy={restoreM.isPending}
+        onConfirm={() => {
+          if (restoreVersionId) restoreM.mutate(restoreVersionId);
+          setRestoreVersionId(null);
+        }}
+        onCancel={() => setRestoreVersionId(null)}
+      />
     </>
   );
 }

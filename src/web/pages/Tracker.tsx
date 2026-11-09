@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   api,
   del,
@@ -16,6 +17,7 @@ export default function TrackerPage() {
   const [form, setForm] = useState({ company: '', position: '', platform: 'BOSS直聘' });
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const PAGE_SIZE = 12;
 
   const { data: records = [], isLoading } = useQuery({
@@ -87,35 +89,30 @@ export default function TrackerPage() {
             </div>
             <div className="app-list">
               {records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => (
-                <Link
-                  key={r.id}
-                  to={`/tracker/${r.id}`}
-                  className="app-card"
-                >
-                  <div className="app-card-main">
-                    <div className="app-card-title">{r.payload?.company || '未命名公司'}</div>
-                    <div className="app-card-meta">
-                      <span className="app-card-company">{r.payload?.position || '—'}</span>
-                      <span className="app-card-company">{r.payload?.platform || '—'}</span>
-                      <span className="app-card-company">聊天 {Array.isArray(r.payload?.chat) ? r.payload.chat.length : 0} 条</span>
-                      <span className="app-card-time muted small">
-                        {fmtTime(r.updatedAt)}
-                      </span>
+                <div key={r.id} className="app-card">
+                  <Link to={`/tracker/${r.id}`} className="app-card-link">
+                    <div className="app-card-main">
+                      <div className="app-card-title">{r.payload?.company || '未命名公司'}</div>
+                      <div className="app-card-meta">
+                        <span className="app-card-company">{r.payload?.position || '—'}</span>
+                        <span className="app-card-company">{r.payload?.platform || '—'}</span>
+                        <span className="app-card-company">聊天 {Array.isArray(r.payload?.chat) ? r.payload.chat.length : 0} 条</span>
+                        <span className="app-card-time muted small">
+                          {fmtTime(r.updatedAt)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                   <div className="app-card-side">
                     <button
                       className="mini danger"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (window.confirm('确认删除这条投递记录？')) deleteM.mutate(r.id);
-                      }}
+                      aria-label={`删除投递记录 ${r.payload?.company || ''}`}
+                      onClick={() => setDeleteTargetId(r.id)}
                     >
                       删除
                     </button>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
 
@@ -142,6 +139,19 @@ export default function TrackerPage() {
           </section>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteTargetId !== null}
+        title="删除投递记录"
+        message="确认删除这条投递记录？此操作不可撤销。"
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          if (deleteTargetId) deleteM.mutate(deleteTargetId);
+          setDeleteTargetId(null);
+        }}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </>
   );
 }

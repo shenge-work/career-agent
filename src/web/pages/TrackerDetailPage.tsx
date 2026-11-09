@@ -1,6 +1,7 @@
 import { useState, type FormEvent, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   api,
   del,
@@ -26,6 +27,7 @@ export default function TrackerDetailPage() {
   const [checkResult, setCheckResult] = useState<any>(null);
   const [transcript, setTranscript] = useState('');
   const [interviewHint, setInterviewHint] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: records = [], isLoading } = useQuery({
     queryKey: ['tracker'],
@@ -111,9 +113,7 @@ export default function TrackerDetailPage() {
         <div className="detail-nav-actions">
           <button
             className="mini danger"
-            onClick={() => {
-              if (window.confirm('确认删除这条投递记录？')) deleteM.mutate(record.id);
-            }}
+            onClick={() => setDeleteOpen(true)}
           >
             删除记录
           </button>
@@ -341,6 +341,19 @@ export default function TrackerDetailPage() {
         </div>
         {interviewHint && <div className="hint" style={{ margin: '8px 0 0' }}>{interviewHint}</div>}
       </section>
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="删除投递记录"
+        message="确认删除这条投递记录？此操作不可撤销。"
+        confirmLabel="删除"
+        busy={deleteM.isPending}
+        onConfirm={() => {
+          deleteM.mutate(record.id);
+          setDeleteOpen(false);
+        }}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }
