@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CareerAgent · UI 设计评审与优化方案</title>
+<style>
+/* ===== 报告自身的设计令牌（示范：单一数据源） ===== */
+:root{
+  --bg:#F7F8FC; --card:#FFFFFF; --card-2:#FBFCFE;
+  --ink:#101828; --ink-2:#475467; --ink-3:#667085; --ink-4:#98A2B3;
+  --line:#E4E7EC; --line-2:#EFF1F5;
+  --brand:#3645D9; --brand-text:#2E3FC4; --brand-soft:#EEF0FF;
+  --p0:#B42318; --p0-bg:#FEF3F2; --p0-line:#FECDCA;
+  --p1:#B54708; --p1-bg:#FFFAEB; --p1-line:#FEDF89;
+  --p2:#175CD3; --p2-bg:#EFF4FF; --p2-line:#B2DDFF;
+  --ok:#067647; --ok-bg:#ECFDF3; --ok-line:#ABEFC6;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-full:999px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px; --s12:48px; --s16:64px;
+  --sh-1:0 1px 2px rgba(16,24,40,.05);
+  --sh-2:0 4px 16px rgba(16,24,40,.07);
+  --sh-3:0 16px 40px rgba(16,24,40,.12);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14.5px;line-height:1.75;-webkit-font-smoothing:antialiased}
+a{color:var(--brand-text);text-decoration:none}
+a:hover{text-decoration:underline}
+:where(a,button,summary,[tabindex]):focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:4px}
+code,pre,.mono{font-family:var(--mono)}
+code{font-size:.88em;background:var(--line-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:#344054}
+h1,h2,h3,h4{margin:0;line-height:1.35;letter-spacing:-.01em}
+p{margin:0}
+ul,ol{margin:0;padding-left:20px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+th{font-weight:600;color:var(--ink-2);background:var(--card-2);font-size:12.5px;letter-spacing:.02em}
+tr:last-child td{border-bottom:0}
+.wrap{max-width:1120px;margin:0 auto;padding:0 var(--s6)}
+.sec{padding:var(--s16) 0 0}
+.sec-head{display:flex;align-items:baseline;gap:var(--s4);margin-bottom:var(--s6)}
+.sec-no{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--brand);letter-spacing:.12em}
+.sec-head h2{font-size:26px;font-weight:650}
+.sec-head .lead{color:var(--ink-3);font-size:13.5px;margin-left:auto;max-width:520px;text-align:right}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1)}
+.pad{padding:var(--s6)}
+.muted{color:var(--ink-3)}
+.tiny{font-size:12px;line-height:1.65}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:var(--r-full);font-size:11.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.tag.p0{background:var(--p0-bg);color:var(--p0);border:1px solid var(--p0-line)}
+.tag.p1{background:var(--p1-bg);color:var(--p1);border:1px solid var(--p1-line)}
+.tag.p2{background:var(--p2-bg);color:var(--p2);border:1px solid var(--p2-line)}
+.tag.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+.tag.neutral{background:var(--line-2);color:var(--ink-2);border:1px solid var(--line)}
+
+/* Hero */
+.hero{background:
+  radial-gradient(900px 420px at 88% -12%,rgba(54,69,217,.16),transparent 62%),
+  radial-gradient(620px 380px at 8% 110%,rgba(54,69,217,.07),transparent 60%),
+  linear-gradient(180deg,#FFFFFF,#F7F8FC);
+  border-bottom:1px solid var(--line);padding:var(--s16) 0 var(--s12)}
+.hero .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;color:var(--brand);font-weight:600;text-transform:uppercase}
+.hero h1{font-size:40px;font-weight:700;margin:var(--s3) 0 var(--s4);letter-spacing:-.025em}
+.hero .sub{font-size:16px;color:var(--ink-2);max-width:760px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s6);margin-top:var(--s6);font-size:12.5px;color:var(--ink-3)}
+.hero .meta b{color:var(--ink-2);font-weight:600}
+.verdict{margin-top:var(--s8);padding:var(--s6);background:var(--card);border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:var(--r-md);box-shadow:var(--sh-2);font-size:15px;line-height:1.8}
+.verdict b{color:var(--brand-text)}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--s3);margin-top:var(--s6)}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:var(--s4) var(--s4) var(--s3);box-shadow:var(--sh-1)}
+.kpi .n{font-size:28px;font-weight:700;line-height:1.1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.5}
+.kpi .hint{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-top:4px}
+
+/* Sticky nav */
+.tabbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.tabbar .wrap{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabbar .wrap::-webkit-scrollbar{display:none}
+.tabbar a{flex:none;padding:13px 12px;font-size:12.5px;color:var(--ink-2);font-weight:500;border-bottom:2px solid transparent}
+.tabbar a:hover{color:var(--brand-text);text-decoration:none;border-bottom-color:var(--brand)}
+
+/* Score */
+.score-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:var(--s6)}
+.score-list{display:flex;flex-direction:column;gap:var(--s4)}
+.score-row .top{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;margin-bottom:7px}
+.score-row .top b{font-variant-numeric:tabular-nums;font-size:14px}
+.bar{height:8px;background:var(--line-2);border-radius:var(--r-full);overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:var(--r-full);background:var(--brand)}
+.bar>i.low{background:#E8590C}.bar>i.mid{background:#F79009}.bar>i.high{background:#12B76A}
+.score-note{margin-top:var(--s3);font-size:12px;color:var(--ink-3)}
+.big-score{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s2);text-align:center;background:linear-gradient(160deg,#fff,#F4F6FF)}
+.big-score .n{font-size:72px;font-weight:750;line-height:1;letter-spacing:-.05em;color:var(--brand-text);font-variant-numeric:tabular-nums}
+.big-score .n small{font-size:22px;color:var(--ink-4);font-weight:500}
+.big-score .cap{font-size:13px;color:var(--ink-2);max-width:280px}
+
+/* Findings */
+.filters{display:flex;gap:var(--s2);flex-wrap:wrap;margin-bottom:var(--s6);align-items:center}
+.filters .lbl{font-size:12.5px;color:var(--ink-3);margin-right:var(--s2)}
+.fbtn{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:var(--r-full);border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;min-height:36px}
+.fbtn:hover{border-color:var(--brand);color:var(--brand-text)}
+.fbtn.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.fbtn.active:hover{color:#fff}
+.findings{display:flex;flex-direction:column;gap:var(--s4)}
+.finding{padding:var(--s6);border-radius:var(--r-lg);border:1px solid var(--line);border-left:4px solid var(--brand)}
+.finding[data-level="P0"]{border-left-color:var(--p0)}
+.finding[data-level="P1"]{border-left-color:var(--p1)}
+.finding[data-level="P2"]{border-left-color:var(--p2)}
+.finding.hidden{display:none}
+.filter-scope.hidden{display:none!important}
+.live{font-size:12px;color:var(--ink-3);margin-left:auto;font-variant-numeric:tabular-nums}
+.finding .fh{display:flex;align-items:flex-start;gap:var(--s3);flex-wrap:wrap;margin-bottom:var(--s3)}
+.finding .fh h3{font-size:16.5px;font-weight:650;flex:1;min-width:260px}
+.finding .id{font-family:var(--mono);font-size:11px;color:var(--ink-4);letter-spacing:.06em}
+.finding .body{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);margin-top:var(--s3)}
+.finding .box{background:var(--card-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3) var(--s4)}
+.finding .box h4{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:650}
+.finding .box p,.finding .box li{font-size:13px;line-height:1.7;color:var(--ink-2)}
+.evidence{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);background:var(--line-2);border-radius:5px;padding:2px 6px;display:inline-block;margin:2px 4px 2px 0}
+pre{background:#101828;color:#E6E9F0;border-radius:var(--r-md);padding:var(--s4);overflow-x:auto;font-size:12px;line-height:1.7;margin:var(--s3) 0 0;position:relative}
+pre code{background:none;border:0;color:inherit;padding:0;font-size:inherit}
+.copy{position:absolute;top:8px;right:8px;font-family:var(--font);font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #344054;background:#1D2939;color:#E6E9F0;cursor:pointer;min-height:28px}
+.copy:hover{background:#344054}
+.accept{margin-top:var(--s3);font-size:12.5px;color:var(--ok);font-weight:600}
+
+/* Tables & generic blocks */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-md);background:var(--card)}
+.tbl-wrap table{min-width:640px}
+.tbl-wrap td:first-child{font-weight:600;color:var(--ink)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6)}
+.stack{display:flex;flex-direction:column;gap:var(--s4)}
+.note{background:var(--brand-soft);border:1px solid #D6DBFF;border-radius:var(--r-md);padding:var(--s4);font-size:13px;color:#25317F;line-height:1.75}
+.note b{font-weight:700}
+ul.clean{list-style:none;padding:0;display:flex;flex-direction:column;gap:10px}
+ul.clean li{display:flex;gap:10px;font-size:13.5px;color:var(--ink-2);line-height:1.7}
+ul.clean li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--brand);margin-top:9px}
+ul.clean li b{color:var(--ink);font-weight:650}
+
+/* Before / After mock */
+.mocks{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6)}
+.mock-card{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--card);box-shadow:var(--sh-2)}
+.mock-cap{display:flex;align-items:center;justify-content:space-between;padding:10px var(--s4);border-bottom:1px solid var(--line);background:var(--card-2)}
+.mock-cap b{font-size:13px}
+.mock{display:flex;height:320px;background:#0A0A0A;font-size:10px;color:#FDFDF6}
+.mock-rail{flex:none;background:#141414;border-right:1px solid #2A2A2A;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 0}
+.mock-rail.after{width:132px;align-items:stretch;padding:12px 8px;gap:2px}
+.mock-rail .rl{width:24px;height:24px;border-radius:7px;background:#3645D9;display:grid;place-items:center;font-size:11px;margin-bottom:6px}
+.mock-rail.after .rl{width:100%;height:26px;border-radius:7px;justify-content:start;padding-left:8px;gap:7px;margin-bottom:8px;font-size:9px}
+.mock-rail .ri{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#8B8B86;font-size:13px}
+.mock-rail .ri.on{background:#3645D9;color:#fff}
+.mock-rail.after .ri{width:100%;height:28px;justify-content:start;padding-left:8px;gap:8px;font-size:9.5px;color:#8B8B86;border-radius:7px}
+.mock-rail.after .ri.on{background:rgba(54,69,217,.22);color:#C9D0FF;box-shadow:inset 3px 0 0 #8FA6FF}
+.mock-rail.after .grp{font-size:8px;letter-spacing:.09em;color:#575752;padding:9px 8px 3px;text-transform:uppercase}
+.mock-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.mock-top{height:36px;flex:none;border-bottom:1px solid #242424;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#8B8B86;font-size:9px}
+.mock-top .av{width:20px;height:20px;border-radius:50%;background:#242424;display:grid;place-items:center;color:#FDFDF6;font-size:9px}
+.mock-top .crumb{display:flex;gap:6px;align-items:center}
+.mock-top .search{width:120px;height:20px;border:1px solid #2A2A2A;border-radius:6px;padding:0 6px;display:flex;align-items:center;font-size:8px;color:#575752}
+.mock-body{padding:12px;overflow:hidden;flex:1}
+.mock-body h5{font-size:13px;font-weight:600;margin:0 0 2px}
+.mock-body .sub{font-size:8.5px;color:#8B8B86;margin-bottom:10px}
+.mock-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:9px}
+.mock-stat{border:1px solid #2A2A2A;border-radius:8px;background:#141414;padding:7px 6px}
+.mock-stat .v{font-size:15px;font-weight:650;line-height:1.1}
+.mock-stat .l{font-size:7.5px;color:#8B8B86;white-space:nowrap}
+.mock-panel{border:1px solid #2A2A2A;border-radius:9px;background:#141414;padding:9px}
+.mock-panel .pt{font-size:8.5px;color:#8B8B86;margin-bottom:6px}
+.mock-funnel{display:flex;align-items:center;gap:6px;margin:3px 0}
+.mock-funnel .fl{width:34px;font-size:7.5px;color:#8B8B86}
+.mock-funnel .fb{flex:1;height:5px;background:#242424;border-radius:99px;overflow:hidden}
+.mock-funnel .fb i{display:block;height:100%;background:#3645D9;border-radius:99px}
+.mock-job{margin-top:8px;border:1px solid #2A2A2A;border-radius:8px;padding:8px;display:flex;align-items:center;gap:8px;position:relative}
+.mock-job .jt{font-size:9.5px;font-weight:600}
+.mock-job .jc{font-size:8px;color:#8B8B86;margin-top:2px}
+.mock-badge{margin-left:auto;font-size:8px;padding:2px 7px;border-radius:99px;white-space:nowrap}
+.mock-badge.broken{background:transparent;color:#8B8B86;border:0;opacity:.55}
+.mock-badge.fixed{background:rgba(31,164,141,.18);color:#4ADE9B;border:1px solid rgba(31,164,141,.35)}
+.mock-del{position:absolute;right:6px;bottom:5px;font-size:9px;color:#8B8B86}
+.mock-del.hidden{opacity:0}
+.mock-del.shown{opacity:1;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:1px solid #2A2A2A}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:var(--s3) var(--s4);border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-2);background:var(--card-2)}
+.legend span b{font-family:var(--mono);color:var(--brand);margin-right:4px}
+
+/* Token layers */
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--card)}
+.layer .ln{width:34px;height:34px;flex:none;border-radius:9px;background:var(--brand-soft);color:var(--brand-text);display:grid;place-items:center;font-family:var(--mono);font-size:12px;font-weight:700}
+.layer b{font-size:13.5px}
+.layer span{font-size:12.5px;color:var(--ink-3)}
+.layer .arrow{margin-left:auto;color:var(--ink-4);font-family:var(--mono);font-size:11px}
+
+.matrix td,.matrix th{text-align:center;font-size:12px}
+.matrix td:first-child{text-align:left}
+.yes{color:var(--ok);font-weight:700}.no{color:var(--p0);font-weight:700}
+
+/* Roadmap */
+.phases{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s4)}
+.phase{padding:var(--s6);border-radius:var(--r-lg);border:1px solid var(--line);background:var(--card)}
+.phase .ph{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--brand);font-weight:700}
+.phase h3{font-size:16px;margin:6px 0 var(--s3)}
+.phase ul{padding-left:18px;font-size:12.8px;color:var(--ink-2);display:flex;flex-direction:column;gap:7px}
+.phase .goal{margin-top:var(--s4);padding-top:var(--s3);border-top:1px dashed var(--line);font-size:12px;color:var(--ok);font-weight:600}
+
+footer{margin-top:var(--s16);padding:var(--s8) 0 var(--s12);border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;font-size:12px;color:var(--ink-3)}
+.anchor{scroll-margin-top:76px}
+
+@media(max-width:900px){
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .score-grid,.two-col,.mocks,.finding .body{grid-template-columns:1fr}
+  .phases{grid-template-columns:1fr}
+  .hero h1{font-size:30px}
+  .sec-head .lead{display:none}
+}
+@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:0 var(--s4)}.sec{padding-top:var(--s12)}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+@media print{.tabbar,.filters,.copy{display:none}.sec{break-inside:avoid}body{background:#fff}}
+</style>
+</head>
+<body>
+
+<!-- 内联 SVG 图标 sprite：报告自身也示范「统一图标源」 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+</svg>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">CareerAgent / Design System Audit</div>
+    <h1>现有 UI 设计评审与优化方案</h1>
+    <p class="sub">对 <code>src/web</code> 全量静态评审：20 个页面、5,896 行 TSX、2,344 行单文件样式表。结论基于代码证据与 WCAG 2.1 AA 对比度实测，不含主观审美评分。</p>
+    <div class="meta">
+      <span><b>评审日期</b> 2026-11-10</span>
+      <span><b>评审人</b> UI Designer · 像素君</span>
+      <span><b>范围</b> 主题 / 排版 / 组件 / 可访问性 / 响应式 / 性能</span>
+      <span><b>版本</b> v0.1.0</span>
+    </div>
+    <div class="verdict">
+      <b>一句话结论：</b>界面已经「可用」，但还没有形成「设计系统」。核心问题不是美观度，而是
+      <b>一致性不可维护</b>（0 个基础组件、30+ 处选择器重复覆盖、16 种字号 / 15 种圆角）、
+      <b>可访问性不达标</b>（无焦点环、图标导航无可读名称、弹窗无键盘管理），
+      以及 <b>1 处确定的渲染缺陷</b>（岗位状态徽章引用了 4 个从未定义的颜色变量，7 条声明全部失效）。
+      建议按 P0 修复 → P1 令牌化与组件抽取 → P2 体验打磨 三阶段推进。
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="n">2,344</div><div class="l">单文件 CSS 行数</div><div class="hint">65.8 KB / 573 选择器</div></div>
+      <div class="kpi"><div class="n">16</div><div class="l">不同字号</div><div class="hint">11–36px，12/13px 占 96 次</div></div>
+      <div class="kpi"><div class="n">15</div><div class="l">不同圆角值</div><div class="hint">2px → 999px</div></div>
+      <div class="kpi"><div class="n">5</div><div class="l">响应式断点</div><div class="hint">全部为 max-width 降级</div></div>
+      <div class="kpi"><div class="n">0</div><div class="l">基础组件</div><div class="hint">20 页面全部手写 class</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar" aria-label="报告目录">
+  <div class="wrap">
+    <a href="#s1">01 健康度</a><a href="#s2">02 现状对照</a><a href="#s3">03 P0 缺陷</a>
+    <a href="#s4">04 P1 结构</a><a href="#s5">05 P2 体验</a><a href="#s6">06 设计令牌</a>
+    <a href="#s7">07 组件库</a><a href="#s8">08 信息架构</a><a href="#s9">09 可访问性</a>
+    <a href="#s10">10 落地路线</a><a href="#s11">附录 · 证据</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- 01 -->
+<section class="sec anchor" id="s1">
+  <div class="sec-head"><span class="sec-no">01</span><h2>设计系统健康度</h2><span class="lead">评分依据为可验证的规范缺口数量与严重度，不是视觉偏好打分。</span></div>
+  <div class="score-grid">
+    <div class="card pad">
+      <div class="score-list">
+        <div class="score-row"><div class="top"><span>主题与色彩令牌</span><b>62 / 100</b></div><div class="bar"><i class="mid" style="width:62%"></i></div><p class="score-note">已有 CSS 变量与暗/亮双主题，但语义色 5 套并行、多处硬编码绕过令牌。</p></div>
+        <div class="score-row"><div class="top"><span>排版层级</span><b>55 / 100</b></div><div class="bar"><i class="mid" style="width:55%"></i></div><p class="score-note">页面主标题跨页使用 20 / 22 / 24 / 30 / 36px；仅 h1、h2 定义了全局字重。</p></div>
+        <div class="score-row"><div class="top"><span>组件一致性</span><b>38 / 100</b></div><div class="bar"><i class="low" style="width:38%"></i></div><p class="score-note">无组件层；同一「次要按钮」有 6 套实现；同一「卡片」有 5 种圆角。</p></div>
+        <div class="score-row"><div class="top"><span>可访问性（WCAG AA）</span><b>32 / 100</b></div><div class="bar"><i class="low" style="width:32%"></i></div><p class="score-note">全局无 <code>:focus-visible</code>；10 个图标入口无可访问名称；对比度多处不达标。</p></div>
+        <div class="score-row"><div class="top"><span>响应式</span><b>58 / 100</b></div><div class="bar"><i class="mid" style="width:58%"></i></div><p class="score-note">5 个零散断点、全部降级式；触摸目标普遍小于 44px。</p></div>
+        <div class="score-row"><div class="top"><span>性能与工程</span><b>70 / 100</b></div><div class="bar"><i class="high" style="width:70%"></i></div><p class="score-note">零图标网络请求、无图片资产；但简历缩略图按行渲染完整 iframe 文档。</p></div>
+      </div>
+    </div>
+    <div class="card pad big-score">
+      <div class="tag neutral">综合成熟度</div>
+      <div class="n">49<small>/100</small></div>
+      <p class="cap">处于「样式表驱动」阶段：功能完整、视觉统一感尚可，但缺少令牌单一数据源与组件契约，边际维护成本随页面数线性上升。</p>
+      <div style="width:100%;margin-top:var(--s4)">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-4);font-family:var(--mono)"><span>样式表驱动</span><span>令牌驱动</span><span>组件系统化</span></div>
+        <div class="bar" style="margin-top:6px"><i style="width:49%"></i></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="sec anchor" id="s2">
+  <div class="sec-head"><span class="sec-no">02</span><h2>现状速写 · Before / After</h2><span class="lead">用同一份「求职总览」还原当前界面与目标界面，差异集中在导航可发现性、状态语义、焦点可见性。</span></div>
+  <div class="mocks">
+    <article class="mock-card">
+      <div class="mock-cap"><b>现状 · 图标栏 + 仪表盘</b><span class="tag p0">AS-IS</span></div>
+      <div class="mock">
+        <div class="mock-rail">
+          <div class="rl">◈</div>
+          <div class="ri on">◈</div><div class="ri">▧</div><div class="ri">▤</div><div class="ri">▣</div>
+          <div class="ri">▦</div><div class="ri">⇄</div><div class="ri">✦</div><div class="ri">◈</div><div class="ri">⚙</div><div class="ri">⎋</div>
+        </div>
+        <div class="mock-main">
+          <div class="mock-top"><span></span><div class="av">Q</div></div>
+          <div class="mock-body">
+            <h5>求职总览</h5><div class="sub">一屏看清你的求职进展</div>
+            <div class="mock-stats">
+              <div class="mock-stat"><div class="v" style="color:#6EA8F6">24</div><div class="l">总投递</div></div>
+              <div class="mock-stat"><div class="v" style="color:#6EA8F6">11</div><div class="l">进行中</div></div>
+              <div class="mock-stat"><div class="v" style="color:#FAB746">5</div><div class="l">面试中</div></div>
+              <div class="mock-stat"><div class="v" style="color:#1FA48D">2</div><div class="l">已录用</div></div>
+              <div class="mock-stat"><div class="v" style="color:#E7675A">6</div><div class="l">已拒绝</div></div>
+            </div>
+            <div class="mock-panel">
+              <div class="pt">投递漏斗</div>
+              <div class="mock-funnel"><span class="fl">有意向</span><div class="fb"><i style="width:70%"></i></div></div>
+              <div class="mock-funnel"><span class="fl">已投递</span><div class="fb"><i style="width:48%"></i></div></div>
+              <div class="mock-funnel"><span class="fl">面试中</span><div class="fb"><i style="width:22%"></i></div></div>
+            </div>
+            <div class="mock-job"><div><div class="jt">高级前端工程师</div><div class="jc">某某科技 · 25k–35k</div></div><span class="mock-badge broken">面试中</span><span class="mock-del hidden">×</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="legend"><span><b>①</b>10 个纯图标，无文字、无 aria-label</span><span><b>②</b>顶栏仅头像</span><span><b>③</b>状态徽章无语义色（变量未定义）</span><span><b>④</b>删除按钮 hover 才出现</span></div>
+    </article>
+    <article class="mock-card">
+      <div class="mock-cap"><b>目标 · 分组导航 + 令牌化组件</b><span class="tag ok">TO-BE</span></div>
+      <div class="mock">
+        <div class="mock-rail after">
+          <div class="rl">◈ &nbsp;CareerAgent</div>
+          <div class="grp">工作区</div>
+          <div class="ri on">▦ &nbsp;总览</div><div class="ri">◈ &nbsp;岗位</div><div class="ri">▤ &nbsp;简历库</div><div class="ri">▧ &nbsp;作品集</div><div class="ri">▦ &nbsp;公司档案</div><div class="ri">⇄ &nbsp;投递管理</div>
+          <div class="grp">智能工具</div><div class="ri">✦ &nbsp;AI 试用台</div><div class="ri">◈ &nbsp;面经库</div>
+          <div class="grp">系统</div><div class="ri">⚙ &nbsp;账号与设置</div>
+        </div>
+        <div class="mock-main">
+          <div class="mock-top"><div class="crumb"><span>工作区</span><span>/</span><span style="color:#FDFDF6">总览</span></div><div style="display:flex;gap:7px;align-items:center"><div class="search">⌕ 搜索岗位、简历…</div><div class="av">Q</div></div></div>
+          <div class="mock-body">
+            <h5>求职总览</h5><div class="sub">一屏看清你的求职进展</div>
+            <div class="mock-stats">
+              <div class="mock-stat"><div class="v" style="color:#7FB3FF">24</div><div class="l">总投递</div></div>
+              <div class="mock-stat"><div class="v" style="color:#7FB3FF">11</div><div class="l">进行中</div></div>
+              <div class="mock-stat"><div class="v" style="color:#F5C26B">5</div><div class="l">面试中</div></div>
+              <div class="mock-stat"><div class="v" style="color:#4ADE9B">2</div><div class="l">已录用</div></div>
+              <div class="mock-stat"><div class="v" style="color:#FF8B7E">6</div><div class="l">已拒绝</div></div>
+            </div>
+            <div class="mock-panel">
+              <div class="pt">投递漏斗</div>
+              <div class="mock-funnel"><span class="fl">有意向</span><div class="fb"><i style="width:70%"></i></div></div>
+              <div class="mock-funnel"><span class="fl">已投递</span><div class="fb"><i style="width:48%"></i></div></div>
+              <div class="mock-funnel"><span class="fl">面试中</span><div class="fb"><i style="width:22%"></i></div></div>
+            </div>
+            <div class="mock-job" style="border-color:#8FA6FF;box-shadow:0 0 0 1px rgba(143,166,255,.35)"><div><div class="jt">高级前端工程师</div><div class="jc">某某科技 · 25k–35k</div></div><span class="mock-badge fixed">面试中</span><span class="mock-del shown">×</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="legend"><span><b>①</b>分组 + 文字 + 激活指示条</span><span><b>②</b>面包屑 + 全局搜索</span><span><b>③</b>语义色徽章（对比度 ≥ 4.5:1）</span><span><b>④</b>操作常驻 + 44px 触控区 + 焦点环</span></div>
+    </article>
+  </div>
+  <p class="tiny muted" style="margin-top:var(--s4)">说明：示意界面为静态还原，用于表达设计决策差异，不代表最终视觉稿；色值取自第 06 节建议令牌。</p>
+</section>
+
+<!-- 03 -->
+<section class="sec anchor" id="s3">
+  <div class="sec-head filter-scope" data-level="P0"><span class="sec-no">03</span><h2>P0 · 必须修复的确定性缺陷</h2><span class="lead">5 项，均为可在浏览器或代码中直接复现的功能 / 合规问题。建议一次提交完成。</span></div>
+  <div class="filters" role="group" aria-label="按严重度筛选问题视图">
+    <span class="lbl">问题视图</span>
+    <button class="fbtn active" data-filter="all" aria-pressed="true">全部</button>
+    <button class="fbtn" data-filter="P0" aria-pressed="false">P0 严重</button>
+    <button class="fbtn" data-filter="P1" aria-pressed="false">P1 结构</button>
+    <button class="fbtn" data-filter="P2" aria-pressed="false">P2 体验</button>
+    <span class="live" id="filter-live" aria-live="polite">当前视图：全部问题</span>
+  </div>
+
+  <div class="findings">
+
+    <article class="finding" data-level="P0">
+      <div class="fh"><span class="id">P0-01</span><h3>岗位状态徽章引用 4 个未定义变量，7 条声明全部失效</h3><span class="tag p0">P0 · 渲染缺陷</span></div>
+      <p class="muted" style="font-size:13.5px">岗位卡片的状态标签本应按「有意向 / 已投递 / 面试中 / 已录用 / 已拒绝 / 已撤回」呈现语义色，但 <code>--_gray</code>、<code>--_blue</code>、<code>--_green</code>、<code>--_red</code> 从未在 <code>:root</code> 或任何主题块中声明（实际存在的是 <code>--_steel-medium</code>、<code>--_link-blue</code>、<code>--_teal</code>、<code>--_coral</code>）。CSS 中 <code>rgba(未定义变量, …)</code> 整条声明被丢弃，结果所有状态都是同一种低对比灰字，删除按钮的危险态也失效。</p>
+      <div class="body">
+        <div class="box"><h4>证据</h4><span class="evidence">styles.css:1715–1720</span><span class="evidence">styles.css:1768–1769</span><span class="evidence">styles.css:11–19（变量清单）</span><p style="margin-top:6px">全库检索确认这 4 个变量只出现在「使用处」，没有「定义处」。</p></div>
+        <div class="box"><h4>影响</h4><p>用户无法在卡片网格里扫读岗位进度，状态筛选与卡片视觉相互矛盾；暗色主题下文字对比度仅约 2.5:1。</p></div>
+      </div>
+      <pre><code>/* 最小补丁：在 :root 与 [data-theme='light'] 各补一组别名（1 行） */
+:root { --_gray: var(--_steel-medium); --_blue: var(--_link-blue);
+        --_green: var(--_teal); --_red: var(--_coral); }
+
+/* 根治方案：删掉 5 套并行的状态色映射，统一为语义令牌 */
+:root {
+  --status-info-bg:    rgba(110,168,246,.16);  --status-info-text:    #7FB3FF;
+  --status-warning-bg: rgba(245,194,107,.16);  --status-warning-text: #F5C26B;
+  --status-success-bg: rgba(74,222,155,.16);   --status-success-text: #4ADE9B;
+  --status-danger-bg:  rgba(255,139,126,.16);  --status-danger-text:  #FF8B7E;
+  --status-neutral-bg: rgba(148,163,184,.14);  --status-neutral-text: #B6BCC8;
+}
+.status-badge[data-status="applied"]      { background:var(--status-info-bg);    color:var(--status-info-text); }
+.status-badge[data-status="interviewing"] { background:var(--status-warning-bg); color:var(--status-warning-text); }
+.status-badge[data-status="offered"]      { background:var(--status-success-bg); color:var(--status-success-text); }
+.status-badge[data-status="rejected"]     { background:var(--status-danger-bg);  color:var(--status-danger-text); }</code><button class="copy">复制</button></pre>
+      <p class="accept"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-check"/></svg> 验收：6 种状态在暗/亮主题下均可区分，文字对比度 ≥ 4.5:1；全库不再出现未声明的 <code>--_*</code> 变量。</p>
+    </article>
+
+    <article class="finding" data-level="P0">
+      <div class="fh"><span class="id">P0-02</span><h3>全局没有键盘焦点指示器，表单还主动移除了 outline</h3><span class="tag p0">P0 · WCAG 2.4.7</span></div>
+      <p class="muted" style="font-size:13.5px">整份 2,344 行样式表中 <code>:focus-visible</code> 出现 0 次，仅 <code>input:focus</code> / <code>select:focus</code> 改了边框色；而 <code>input</code>、<code>select</code>、<code>textarea</code> 都设了 <code>outline: none</code>。键盘用户进入输入框后几乎看不到焦点位置，登录页、新建岗位、JD 粘贴框均受影响。20 个 TSX 中与键盘相关的处理仅 5 处。</p>
+      <div class="body">
+        <div class="box"><h4>证据</h4><span class="evidence">styles.css:249–263</span><span class="evidence">styles.css:772–795</span><span class="evidence">styles.css（全文 0 处 focus-visible）</span></div>
+        <div class="box"><h4>影响</h4><p>违反 WCAG 2.1 AA 2.4.7 Focus Visible；键盘与读屏用户无法完成核心「新建岗位 → 编辑 → 投递」路径。</p></div>
+      </div>
+      <pre><code>:root { --focus-ring:2px solid var(--brand-text); --focus-offset:2px; }
+
+/* 统一焦点环：所有可交互元素，仅在键盘操作时出现 */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+/* 深色主题用亮色焦点环，保证 3:1 非文本对比度 */
+:root[data-theme='dark'] { --focus-ring:2px solid #8FA6FF; }
+
+/* 删除 input/select/textarea 里的 outline:none；hover/focus 只做增强 */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--brand-text);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}</code><button class="copy">复制</button></pre>
+      <p class="accept"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-check"/></svg> 验收：纯 Tab 走完登录页与任一表单，每一步焦点位置清晰可见。</p>
+    </article>
+
+    <article class="finding" data-level="P0">
+      <div class="fh"><span class="id">P0-03</span><h3>图标侧栏 10 个入口没有可访问名称，提示气泡仅 hover 触发</h3><span class="tag p0">P0 · WCAG 1.1.1 / 4.1.2</span></div>
+      <p class="muted" style="font-size:13.5px"><code>Layout.tsx</code> 把 <code>GROUPS</code> 定义的分组全部平铺为图标按钮，图标字符标了 <code>aria-hidden</code>，链接本身只有 <code>data-tip</code> 属性（CSS <code>::after</code> 伪元素）。读屏软件读到的只有一串空链接；键盘聚焦时气泡也不出现（CSS 只写了 <code>:hover::after</code>）；触屏完全没有提示。</p>
+      <div class="body">
+        <div class="box"><h4>证据</h4><span class="evidence">Layout.tsx:7–28（GROUPS 分组未被使用）</span><span class="evidence">Layout.tsx:81–111</span><span class="evidence">styles.css:355–381</span></div>
+        <div class="box"><h4>影响</h4><p>导航可发现性差：新用户必须逐个悬停猜测图标含义；辅助技术用户无法导航。分组结构已写好却未渲染，属遗留死代码。</p></div>
+      </div>
+      <pre><code>/* 短期：给每个链接可访问名称，并让键盘聚焦也显示提示 */
+&lt;NavLink to={n.to} aria-label={n.label} title={n.label}
+  data-tip={n.label} className="icon-side-btn"&gt;
+  &lt;span aria-hidden&gt;{n.icon}&lt;/span&gt;
+&lt;/NavLink&gt;
+
+.icon-side-btn:hover::after,
+.icon-side-btn:focus-visible::after { opacity:1; transform:translateY(-50%) translateX(0); }
+
+/* 目标：按 GROUPS 渲染「分组标题 + 图标 + 文字」的 240px 侧栏，
+   窄屏折叠为 64px 图标栏并以 aria-label / tooltip 兜底 */</code><button class="copy">复制</button></pre>
+      <p class="accept"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-check"/></svg> 验收：读屏逐个朗读 10 个入口名称；Tab 聚焦时提示出现；320px 宽下导航仍可完整操作。</p>
+    </article>
+
+    <article class="finding" data-level="P0">
+      <div class="fh"><span class="id">P0-04</span><h3>卡片链接内嵌删除按钮，且删除操作默认完全隐藏</h3><span class="tag p0">P0 · 语义 / 触控</span></div>
+      <p class="muted" style="font-size:13.5px"><code>Applications.tsx</code> 把整张岗位卡片做成 <code>&lt;Link&gt;</code>，内部又放了一个 <code>&lt;button&gt;</code>。这是无效的嵌套交互元素：读屏与键盘行为不可预测，点击需靠 <code>preventDefault + stopPropagation</code> 打补丁。同时 <code>.job-card-delete</code> 默认 <code>opacity: 0</code>、尺寸 20px，键盘用户永远看不到，触屏也没有 hover。删除确认还用了原生 <code>window.confirm</code>，与简历库已有的内联 Modal 不一致。</p>
+      <div class="body">
+        <div class="box"><h4>证据</h4><span class="evidence">Applications.tsx:161–185</span><span class="evidence">Applications.tsx:180</span><span class="evidence">styles.css:1746–1770</span><span class="evidence">Library.tsx:577–593（已有 Modal）</span></div>
+        <div class="box"><h4>影响</h4><p>桌面端删除入口不可见；移动端不可达；危险操作缺少统一的、可键盘操作的确认流程。</p></div>
+      </div>
+      <pre><code>/* 结构：链接与按钮同级，卡片本身不再是可点击元素 */
+&lt;article className="job-card"&gt;
+  &lt;Link className="job-card-main" to={`/applications/${a.id}`} aria-label={`查看 ${a.position}`}&gt;…&lt;/Link&gt;
+  &lt;button className="job-card-delete" aria-label={`删除 ${a.position}`}
+          onClick={() =&gt; openConfirm(a.id)}&gt;×&lt;/button&gt;
+&lt;/article&gt;
+
+.job-card-delete { min-width:44px; min-height:44px; opacity:1; }
+.job-card:focus-within .job-card-delete { outline:2px solid var(--brand-text); }
+/* 8 处 window.confirm 统一替换为 &lt;ConfirmDialog&gt; */</code><button class="copy">复制</button></pre>
+      <p class="accept"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-check"/></svg> 验收：卡片内无嵌套交互元素；删除按钮常驻且触控区 ≥ 44×44px；全库 0 处 <code>window.confirm</code>。</p>
+    </article>
+
+    <article class="finding" data-level="P0">
+      <div class="fh"><span class="id">P0-05</span><h3>菜单与弹窗缺少键盘管理、焦点陷阱和语义标注</h3><span class="tag p0">P0 · WCAG 2.1.2 / 2.4.3</span></div>
+      <p class="muted" style="font-size:13.5px">账户下拉、行内「⋯」菜单、删除确认框都只做了「点击外部关闭」（<code>mousedown</code> 监听）：没有 Escape 关闭、打开时不转移焦点、关闭后不归还焦点、没有焦点陷阱；<code>role="menu"</code> 的子项不是 <code>menuitem</code>，<code>role="dialog"</code> 缺 <code>aria-labelledby</code>。简历库列表行用 <code>&lt;li onClick&gt;</code> 实现选中，无 <code>tabIndex</code> 与键盘事件，键盘无法选中。</p>
+      <div class="body">
+        <div class="box"><h4>证据</h4><span class="evidence">Layout.tsx:50–59 / 118–163</span><span class="evidence">Library.tsx:44–108</span><span class="evidence">Library.tsx:295–299</span><span class="evidence">Library.tsx:577–593</span></div>
+        <div class="box"><h4>影响</h4><p>键盘用户会被困在弹出层外，或弹窗关闭后焦点丢失到文档顶部；读屏无法理解弹窗用途。</p></div>
+      </div>
+      <pre><code>/* 统一 useDialog / useMenu 契约（每个浮层都必须满足） */
+1. 打开：焦点移入浮层第一个可交互元素
+2. 期间：Tab / Shift+Tab 在浮层内循环（焦点陷阱）
+3. Escape：关闭，并把焦点归还给触发元素
+4. 语义：role="dialog" + aria-modal="true" + aria-labelledby
+         role="menu" + 子项 role="menuitem" + 方向键导航
+5. 可点击行：改为 &lt;button&gt; 或补 role="button" tabIndex=0 onKeyDown(Enter/Space)</code><button class="copy">复制</button></pre>
+      <p class="accept"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-check"/></svg> 验收：所有浮层可纯键盘打开、操作、关闭；关闭后焦点回到触发按钮。</p>
+    </article>
+
+  </div>
+</section>
+
+<!-- 04 -->
+<section class="sec anchor" id="s4">
+  <div class="sec-head filter-scope" data-level="P1"><span class="sec-no">04</span><h2>P1 · 系统性结构问题</h2><span class="lead">不修复不会立刻「坏掉」，但每新增一个页面，不一致与返工成本都会累加。</span></div>
+  <div class="tbl-wrap filter-scope" data-level="P1">
+    <table>
+      <thead><tr><th style="width:20%">问题</th><th style="width:42%">代码证据与量化</th><th style="width:38%">后果</th></tr></thead>
+      <tbody>
+        <tr><td>单文件样式表按迭代批次堆叠</td><td>2,344 行 / 65.8 KB / 573 个选择器，注释以 P2、P4、D7、N5、N12、0012 等批次命名；无 <code>@layer</code>、无按组件分文件。</td><td>新增样式只能继续追加，无法判断某条规则是否仍被使用；回归风险随行数上升。</td></tr>
+        <tr><td>≥30 个选择器重复定义并互相覆盖</td><td><code>.form-grid</code>（770 / 984 / 1640 行，3 套列定义）、<code>.detail-section</code>（1203 与 1941 行，语义完全不同）、<code>.list li.selected</code>（692 与 2136 行，后者覆盖前者）、<code>.icon-side-btn</code>、<code>.split</code>、<code>.editor-grid</code>、<code>.co-card:hover</code>、<code>.app-card</code> 等。</td><td>后写的全局规则会串改其它页面：例如 <code>.co-edit .form-grid</code> 被第 1640 行的 <code>1fr 200px auto</code> 影响，属于隐性布局 bug。</td></tr>
+        <tr><td>没有组件层</td><td><code>src/web</code> 下 24 个文件全平铺，0 个 <code>components/</code>；20 个页面 5,896 行 TSX 直接手写 class 字符串；33 处内联 <code>style=&#123;&#123;…&#125;&#125;</code>。</td><td>同一「次要按钮」存在 <code>button.mini</code> / <code>a.mini</code> / <code>.ghost</code> / <code>.page-btn</code> / <code>.cf-actions a.mini</code> / <code>.att-card a.mini</code> 六套实现，细节各不相同。</td></tr>
+        <tr><td>令牌离散，无单一数据源</td><td>16 种字号（12px 用 50 次、13px 用 46 次，另含 11 / 12.5 / 13.5 / 17 / 19px 等零散值）；15 种圆角（2 / 4 / 5 / 6 / 7 / 8 / 9 / 10 / 12 / 14 / 16 / 18 / 20px / 50% / 999px）；5 个断点（820 / 860 / 900 / 1024 / 1100px）。</td><td>同类卡片圆角有 12 / 14 / 16 / 20px 四种；页面主标题 20 / 22 / 24 / 30 / 36px 五种；跨页切换时视觉节奏跳动。</td></tr>
+        <tr><td>语义色 5 套并行映射</td><td><code>.tone-*</code>（1497）、<code>.chip.status-*</code>（1613）、<code>.job-card-status.status-*</code>（1715）、<code>.jd-chip.*</code>（1086）、<code>.match-tag.*</code>（942）；另有硬编码 <code>#16a34a</code> / <code>#d97706</code>（934、950）。</td><td>同一「面试中」在不同页面颜色不同；亮色主题下硬编码绿 / 橙对比度仅 3.30:1 / 3.19:1（白底），低于 AA 4.5:1。</td></tr>
+        <tr><td>强调色既做填充又做文字</td><td><code>--accent: #3645D9</code> 同时用于导航激活底色、链接文字、边框；实测暗底对比度 <b>2.84:1</b>、暗面板 <b>2.64:1</b>，远低于 4.5:1。<code>--faint</code>（32% 透明度）在暗 / 亮主题均约 <b>2.5:1</b>。</td><td><code>.detail-back</code>、<code>.dash-card-more</code>、<code>.home-foot a</code> 等链接在暗色主题下难读；辅助文字、时间戳、空状态普遍偏淡。</td></tr>
+        <tr><td>图标使用 Unicode 几何字符</td><td><code>◈ ▧ ▤ ▣ ▦ ⇄ ✦ ⌂ ⚙ ⎋ ⟲</code> 及 emoji <code>👤 👥</code>（Account.tsx:10–15）。</td><td>跨平台字形、基线、光学尺寸不一致；无法统一 stroke weight；零网络请求是优点，但换不来一致性。</td></tr>
+        <tr><td>明显的设计迁移遗留</td><td><code>GROUPS</code> 分组数据未被 Layout 使用；<code>.home-*</code> 约 115 行（1368–1483）无对应组件；<code>.sidebar-*</code> 整段（426–553）、<code>.icon-rail</code>（383–424）已无引用。</td><td>死样式增加认知负担，也让「当前真实设计语言」难以辨认。</td></tr>
+        <tr><td>主按钮与品牌主色脱节</td><td>主按钮使用 <code>rgba(--_ivory-light, .92)</code> 反色底（styles.css:265–280），亮色主题下变成黑底；<code>--accent</code> 靛蓝只用在次要位置。</td><td>两个主题的主按钮观感相反，品牌识别弱；主操作层级不靠品牌色建立。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="sec anchor" id="s5">
+  <div class="sec-head filter-scope" data-level="P2"><span class="sec-no">05</span><h2>P2 · 体验完整度与性能</h2><span class="lead">属于「从能用到好用」的一层，建议在令牌与组件就位后再做。</span></div>
+  <div class="two-col filter-scope" data-level="P2">
+    <div class="stack">
+      <div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">状态覆盖不完整</h3><ul class="clean">
+        <li>加载态只有 <code>加载中…</code> 纯文本，全库 <b>0 处骨架屏</b>；首页 5 个指标卡同时加载时整页跳动。</li>
+        <li>按钮 <code>:active</code> 状态全库缺失；busy 仅替换文字，无 spinner / 进度反馈。</li>
+        <li>空状态 <code>.empty</code> 只有一句灰字，没有引导动作；错误态 <code>.alert</code> 无 <code>role="alert"</code>。</li>
+        <li>无 <code>prefers-reduced-motion</code> 适配；无 200% 文本缩放验证。</li>
+      </ul></div>
+      <div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">响应式细节</h3><ul class="clean">
+        <li>所有断点都是 <code>max-width</code> 降级，未采用移动优先；5 个断点值互不成体系。</li>
+        <li>10+ 图标在窄屏仍纵向排满 64px 图标栏，<code>.icon-sidebar</code> 无滚动 / 折叠策略。</li>
+        <li><code>.dash-stats</code> 最窄只降到 2 列，320px 宽下指标卡挤压；<code>.editor-grid</code> 在小屏仍保留 <code>min-height: 620px</code>。</li>
+        <li>内容宽度不统一：<code>.content-body</code> 1280px、<code>.dashboard</code> 960px、<code>.detail-page</code> 960px。</li>
+      </ul></div>
+    </div>
+    <div class="stack">
+      <div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">触摸目标小于 44px</h3>
+        <div class="tbl-wrap" style="border:0"><table style="min-width:0"><thead><tr><th>元素</th><th>尺寸</th><th>位置</th></tr></thead><tbody>
+          <tr><td>卡片删除按钮</td><td>20×20px</td><td>styles.css:1746</td></tr>
+          <tr><td>「+」占位按钮</td><td>26×26px</td><td>styles.css:1413</td></tr>
+          <tr><td>侧栏工具按钮</td><td>28×28px</td><td>styles.css:446</td></tr>
+          <tr><td>「⋯」更多菜单</td><td>30×30px</td><td>styles.css:1170</td></tr>
+          <tr><td>排序下拉</td><td>高约 30px</td><td>styles.css:1140</td></tr>
+        </tbody></table></div>
+        <p class="tiny muted" style="margin-top:10px">WCAG 2.5.5 / 移动端建议 44×44px；可用 <code>min-width/min-height</code> 扩大热区而不改变视觉尺寸。</p>
+      </div>
+      <div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">性能与工程隐患</h3><ul class="clean">
+        <li>简历列表每行渲染一个 <b>450×637 的完整 iframe 文档</b> 再 <code>scale(0.1955)</code> 缩略（styles.css:1113–1122）。已设 <code>loading="lazy"</code>，但长列表仍会累积文档实例与内存；建议改为服务端生成静态缩略图或 canvas 位图缓存。</li>
+        <li><code>.split</code> / <code>.editor-grid</code> 用 <code>calc(100vh - 140px)</code>、<code>calc(100vh - 232px)</code> 硬编码高度，顶栏变化即错位；建议改 flex/grid + <code>min-height:0</code>。</li>
+        <li>预览区底色硬编码 <code>#2a2a2a</code> / <code>#1f1f1f</code>（879、885），亮色主题下与整体割裂。</li>
+        <li>单文件 65.8 KB CSS 无按需拆分，但体量尚小；优先级低于令牌整理。</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 -->
+<section class="sec anchor" id="s6">
+  <div class="sec-head"><span class="sec-no">06</span><h2>优化方案 · 设计令牌系统</h2><span class="lead">保留现有暗/亮双主题机制与 RGB 三元组写法，重新划分 primitive → semantic 两层，并把「填充色」与「文字色」拆开。</span></div>
+  <div class="note" style="margin-bottom:var(--s6)"><b>核心决策：</b>把 <code>--accent</code> 拆成 <code>--brand</code>（填充/边框，保持 #3645D9）与 <code>--brand-text</code>（文字，暗色 #8FA6FF / 亮色 #2E3FC4）。这是解决链接对比度 2.84:1 的关键，同时保留品牌色相。所有语义状态色同时提供 <code>-bg</code> 与 <code>-text</code> 两个变体，5 套并行映射据此收敛为 1 套。</div>
+
+  <div class="two-col" style="margin-bottom:var(--s6)">
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">令牌分层</h3>
+      <div class="layers">
+        <div class="layer"><span class="ln">01</span><div><b>Primitive</b><br><span>原始色板 RGB 三元组、字号、间距、圆角数值；不带语义，禁止在组件中直接引用。</span></div></div>
+        <div class="layer"><span class="ln">02</span><div><b>Semantic</b><br><span>bg / surface / border / text / muted / faint / brand / status-*；按主题块覆盖。</span></div></div>
+        <div class="layer"><span class="ln">03</span><div><b>Component</b><br><span>btn-primary-bg、card-radius、input-border；组件内部只引用这一层。</span></div></div>
+        <div class="layer"><span class="ln">04</span><div><b>Page</b><br><span>页面布局变量（内容宽度、栏宽、顶栏高）；不再出现裸 px 数值。</span></div></div>
+      </div>
+    </div>
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">六个尺度（收敛后）</h3>
+      <div class="tbl-wrap" style="border:0"><table style="min-width:0"><thead><tr><th>尺度</th><th>目标值</th><th>现状 → 目标</th></tr></thead><tbody>
+        <tr><td>字号</td><td>12 / 13 / 14 / 16 / 18 / 24 / 32px</td><td>16 种 → 7 级</td></tr>
+        <tr><td>行高</td><td>1.4（标题）/ 1.6（正文）/ 1.75（长文）</td><td>仅 p 定义 1.6</td></tr>
+        <tr><td>字重</td><td>400 正文 / 500 强调 / 650 标题 / 700 数字</td><td>500/600/700 混用</td></tr>
+        <tr><td>间距</td><td>4 / 8 / 12 / 16 / 24 / 32 / 48 / 64px</td><td>4pt 基准 → 8pt 节奏</td></tr>
+        <tr><td>圆角</td><td>4 / 8 / 12 / 16px + full</td><td>15 种 → 5 级</td></tr>
+        <tr><td>断点</td><td>640 / 768 / 1024 / 1280px（移动优先）</td><td>5 个降级 → 4 级升序</td></tr>
+        <tr><td>阴影 / 动效</td><td>3 级阴影；150 / 250 / 400ms</td><td>散落硬编码</td></tr>
+        <tr><td>触控与焦点</td><td>≥44px；2px 焦点环 + 2px offset</td><td>20–30px；无焦点环</td></tr>
+      </tbody></table></div>
+    </div>
+  </div>
+
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:var(--s3)">可直接粘贴的 <code>tokens.css</code> 核心片段</h3>
+    <pre><code>/* Layer 1 · Primitive（沿用项目现有 RGB 三元组写法） */
+:root {
+  --_indigo:54,69,217; --_link-blue:110,168,246; --_teal:31,164,141;
+  --_coral:231,103,90; --_amber:250,183,70; --_steel-medium:51,65,85;
+  --_ivory-light:253,253,246;
+
+  --fs-1:12px; --fs-2:13px; --fs-3:14px; --fs-4:16px;
+  --fs-5:18px; --fs-6:24px; --fs-7:32px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-6:24px; --sp-8:32px; --sp-12:48px; --sp-16:64px;
+  --r-1:4px; --r-2:8px; --r-3:12px; --r-4:16px; --r-full:999px;
+  --shadow-1:0 1px 2px rgb(0 0 0 / .05);
+  --shadow-2:0 4px 16px rgb(0 0 0 / .10);
+  --shadow-3:0 16px 40px rgb(0 0 0 / .18);
+  --t-fast:150ms ease; --t-normal:250ms ease; --t-slow:400ms ease;
+  --tap-min:44px; --focus-offset:2px;
+}
+
+/* Layer 2 · Semantic — 暗色（默认） */
+:root, :root[data-theme='dark'] {
+  --bg:#0A0A0A; --surface:#141414; --surface-2:#1C1C1C; --surface-3:#242424;
+  --border:#2A2A2A; --line:#242424;
+  --text:#FDFDF6; --muted:#A6A6A0;   /* ≥ 4.5:1 */
+  --faint:#8A8A85;                   /* 由 32% 提升到 ≥ 4.5:1 */
+  --brand:rgb(var(--_indigo)); --brand-soft:rgba(var(--_indigo),.18);
+  --brand-text:#8FA6FF;              /* 暗面板 7.95:1 */
+  --on-brand:#FFFFFF;
+  --focus-ring:2px solid #8FA6FF;
+
+  --info-bg:rgba(127,179,255,.16);    --info-text:#7FB3FF;
+  --success-bg:rgba(74,222,155,.16);  --success-text:#4ADE9B;
+  --warning-bg:rgba(245,194,107,.16); --warning-text:#F5C26B;
+  --danger-bg:rgba(255,139,126,.16);  --danger-text:#FF8B7E;
+  --neutral-bg:rgba(148,163,184,.14);--neutral-text:#B6BCC8;
+}
+
+/* Layer 2 · Semantic — 亮色 */
+:root[data-theme='light'] {
+  --bg:#F7F7F5; --surface:#FFFFFF; --surface-2:#F0F0EE; --surface-3:#E8E8E5;
+  --border:#E0E0DC; --line:#E8E8E5;
+  --text:#111827; --muted:#5A6472; --faint:#667085;  /* 4.6:1 */
+  --brand:rgb(var(--_indigo)); --brand-soft:rgba(var(--_indigo),.10);
+  --brand-text:#2E3FC4;              /* 白底 8.00:1 */
+  --on-brand:#FFFFFF;
+  --focus-ring:2px solid #2E3FC4;
+
+  --info-bg:#EFF4FF;    --info-text:#175CD3;
+  --success-bg:#ECFDF3; --success-text:#0B7A5C;
+  --warning-bg:#FFFAEB; --warning-text:#8A5300;
+  --danger-bg:#FEF3F2;  --danger-text:#B42318;
+  --neutral-bg:#F2F4F7; --neutral-text:#475467;
+}
+
+/* Layer 4 · 全局行为 */
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible {
+  outline:var(--focus-ring); outline-offset:var(--focus-offset);
+}
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }</code><button class="copy">复制</button></pre>
+    <div class="tbl-wrap" style="margin-top:var(--s6);border:0">
+      <table><thead><tr><th>用途</th><th>现状色值</th><th>现状对比度</th><th>建议色值</th><th>建议对比度</th><th>AA</th></tr></thead><tbody>
+        <tr><td>暗色主题链接文字</td><td><code>#3645D9</code></td><td>2.84:1（背景）/ 2.64:1（面板）</td><td><code>#8FA6FF</code></td><td>8.55:1 / 7.95:1</td><td class="yes">通过</td></tr>
+        <tr><td>亮色主题链接文字</td><td><code>#3645D9</code></td><td>约 6.3:1</td><td><code>#2E3FC4</code></td><td>8.00:1</td><td class="yes">通过</td></tr>
+        <tr><td>辅助文字 faint（双主题）</td><td>32% 透明度</td><td>约 2.5:1</td><td><code>#8A8A85</code> / <code>#667085</code></td><td>≥ 4.5:1</td><td class="yes">通过</td></tr>
+        <tr><td>亮色主题琥珀状态文字</td><td><code>#B47814</code></td><td>3.47:1</td><td><code>#8A5300</code></td><td>6.33:1</td><td class="yes">通过</td></tr>
+        <tr><td>硬编码绿 / 橙（亮色底）</td><td><code>#16A34A</code> / <code>#D97706</code></td><td>3.30:1 / 3.19:1</td><td><code>#0B7A5C</code> / <code>#8A5300</code></td><td>5.31:1 / 6.33:1</td><td class="yes">通过</td></tr>
+      </tbody></table>
+    </div>
+    <p class="tiny muted" style="margin-top:var(--s3)">对比度按 WCAG 2.1 相对亮度公式计算，背景分别取 <code>#0A0A0A</code> / <code>#141414</code> / <code>#FFFFFF</code> / <code>#F7F7F5</code>；半透明色按合成后的近似值估算。目标：正文 ≥ 4.5:1，大字与图形 ≥ 3:1。</p>
+  </div>
+</section>
+
+<!-- 07 -->
+<section class="sec anchor" id="s7">
+  <div class="sec-head"><span class="sec-no">07</span><h2>优化方案 · 组件库契约</h2><span class="lead">先建 8 个基础组件，再按页面渐进替换；不要求一次性重写 20 个页面。</span></div>
+  <div class="card pad" style="margin-bottom:var(--s6)">
+    <div class="tbl-wrap" style="border:0"><table><thead><tr><th style="width:14%">组件</th><th style="width:26%">变体 / Props</th><th style="width:34%">替换的现有实现</th><th style="width:26%">必须内置的能力</th></tr></thead><tbody>
+      <tr><td>Button</td><td><code>variant: primary | secondary | ghost | danger</code><br><code>size: sm | md</code> · <code>loading</code> · <code>icon</code></td><td><code>button</code> 全局样式、<code>.ghost</code>、<code>button.mini</code>、<code>a.mini</code>、<code>.page-btn</code>、<code>.filter-tab</code>、<code>.login-submit</code></td><td>统一 44px 热区、focus 环、loading 锁、<code>aria-busy</code></td></tr>
+      <tr><td>TextField / Select / Textarea</td><td><code>label</code> · <code>hint</code> · <code>error</code> · <code>required</code></td><td>裸 <code>input</code> / <code>select</code> / <code>textarea</code> + 各处 <code>placeholder</code> 当标签</td><td><code>htmlFor</code> 关联、<code>aria-describedby</code>、错误态 <code>role="alert"</code></td></tr>
+      <tr><td>Card / Panel</td><td><code>elevated | outlined</code> · <code>padding</code></td><td><code>.card</code> 16px、<code>.panel</code> 16px、<code>.dash-card</code> 14px、<code>.stat-card</code> 14px、<code>.job-card</code> 12px、<code>.co-card</code> 12px、<code>.demo-card</code> 20px</td><td>单一 <code>--card-radius:12px</code>，统一内边距 16px</td></tr>
+      <tr><td>StatusBadge</td><td><code>status: 6 态</code> · <code>size</code></td><td><code>.tone-*</code>、<code>.chip.status-*</code>、<code>.job-card-status.status-*</code>、<code>.jd-chip.*</code>、<code>.match-tag.*</code></td><td>单一 <code>data-status</code> → 语义令牌映射；文字 ≥ 4.5:1</td></tr>
+      <tr><td>Dialog / ConfirmDialog</td><td><code>open</code> · <code>onClose</code> · <code>title</code> · <code>destructive</code></td><td><code>.modal-backdrop</code>、8 处 <code>window.confirm</code></td><td>焦点陷阱、Escape、焦点归还、<code>aria-labelledby</code></td></tr>
+      <tr><td>Menu / Dropdown</td><td><code>trigger</code> · <code>items</code> · <code>placement</code></td><td><code>.account-pop</code>、<code>.menu-pop</code>、<code>.menu-wrap</code></td><td><code>role=menu/menuitem</code>、方向键、外部点击、Escape</td></tr>
+      <tr><td>Tooltip</td><td><code>content</code> · <code>side</code></td><td>CSS <code>::after + attr(data-tip)</code>（仅 hover）</td><td>hover + focus 触发、<code>aria-describedby</code>、触屏兜底</td></tr>
+      <tr><td>Skeleton / EmptyState</td><td><code>lines</code> · <code>action</code></td><td><code>加载中…</code>（0 骨架屏）、<code>.empty</code> 单句灰字</td><td>保持布局尺寸、<code>aria-live="polite"</code>、空态引导 CTA</td></tr>
+    </tbody></table></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">状态矩阵（每个交互组件必须覆盖）</h3>
+      <div class="tbl-wrap" style="border:0"><table class="matrix" style="min-width:0"><thead><tr><th>组件</th><th>default</th><th>hover</th><th>focus</th><th>active</th><th>disabled</th><th>loading</th><th>error</th><th>empty</th></tr></thead><tbody>
+        <tr><td>Button</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">缺</td><td class="no">缺</td><td class="yes">✓</td><td class="no">缺</td><td>—</td><td>—</td></tr>
+        <tr><td>TextField</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">缺</td><td>—</td><td class="yes">✓</td><td>—</td><td class="no">缺</td><td>—</td></tr>
+        <tr><td>Card / 列表</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">缺</td><td class="yes">✓</td><td>—</td><td class="no">缺</td><td>—</td><td>单薄</td></tr>
+        <tr><td>Dialog / Menu</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">缺</td><td>—</td><td class="yes">✓</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>StatusBadge</td><td class="no">失效</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
+      <p class="tiny muted" style="margin-top:10px">「缺」指当前代码没有对应实现；优先补齐 focus / active / loading / error 四类。</p>
+    </div>
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">目录与迁移策略</h3>
+      <pre style="margin-top:0"><code>src/web/
+├─ styles/
+│  ├─ tokens.css        # primitive + semantic（双主题）
+│  ├─ base.css          # reset / 排版 / 焦点 / 工具类
+│  └─ layout.css        # shell / topbar / 内容容器
+├─ components/          # 8 个基础组件 + 单测 + 状态矩阵
+│  ├─ Button.tsx  StatusBadge.tsx  Dialog.tsx  Menu.tsx
+│  └─ TextField.tsx  Card.tsx  Tooltip.tsx  Skeleton.tsx
+├─ icons/               # 内联 SVG sprite，替换 Unicode 字符
+└─ pages/               # 逐页迁移，旧类名作为兼容别名保留一期</code></pre>
+      <p class="tiny muted" style="margin-top:10px">建议用 <code>@layer tokens, base, components, pages</code> 明确层叠顺序，从机制上杜绝「后写的全局规则覆盖前面页面」这一类问题。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 08 -->
+<section class="sec anchor" id="s8">
+  <div class="sec-head"><span class="sec-no">08</span><h2>优化方案 · 信息架构与响应式</h2><span class="lead">工作台已有 10 个功能入口；把它们从「猜图标」变成「看得懂、找得到」是收益最高的一处改动。</span></div>
+  <div class="two-col">
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">导航与顶栏</h3>
+      <ul class="clean">
+        <li><b>恢复分组：</b>直接使用 <code>Layout.tsx</code> 已定义但未渲染的 <code>GROUPS</code>（工作区 / 智能工具 / 系统），分组标题可折叠。</li>
+        <li><b>侧栏双形态：</b>展开 240px（图标 + 文字 + 分组）、折叠 64px（图标 + <code>aria-label</code> + tooltip）。激活态用 <b>3px 左侧指示条 + 柔和背景</b>，不只靠底色反差。</li>
+        <li><b>顶栏承担定位：</b>面包屑 + 当前页标题 + 全局搜索（岗位 / 简历 / 公司）+ 账户入口；高度固定 56px，用 flex 而非 <code>calc(100vh - Npx)</code> 推导内容高度。</li>
+        <li><b>统一内容宽度：</b>全站 <code>max-width:1120px</code>，取消 1280 / 960 混用；详情页与仪表盘共用同一栅格。</li>
+        <li><b>收敛主操作：</b>每个页面右上角固定一个 primary Button；主按钮统一使用 <code>--brand</code> 填充 + <code>--on-brand</code> 文字，不再随主题反色。</li>
+      </ul>
+    </div>
+    <div class="card pad">
+      <h3 style="font-size:15px;margin-bottom:var(--s3)">断点行为表（移动优先）</h3>
+      <div class="tbl-wrap" style="border:0"><table style="min-width:0"><thead><tr><th>宽度</th><th>导航</th><th>内容</th></tr></thead><tbody>
+        <tr><td>320–639px</td><td>底部 4 项 Tab +「更多」抽屉；图标栏不参与布局</td><td>单列；指标卡 2 列但压缩内边距；卡片操作常驻</td></tr>
+        <tr><td>640–767px</td><td>64px 图标栏（可滚动）</td><td>单列；双栏编辑器改为上下 Tab 切换</td></tr>
+        <tr><td>768–1023px</td><td>64px 图标栏 + hover/focus tooltip</td><td>指标卡 3 列；列表 + 详情改为抽屉</td></tr>
+        <tr><td>1024–1279px</td><td>240px 展开侧栏（可折叠）</td><td>指标卡 5 列；列表 1fr + 详情 360px</td></tr>
+        <tr><td>≥1280px</td><td>240px 侧栏 + 顶栏搜索常驻</td><td>内容 1120px 居中；详情 420px</td></tr>
+      </tbody></table></div>
+      <p class="tiny muted" style="margin-top:10px">所有断点从 <code>min-width</code> 向上定义；触控目标统一 <code>min-width/min-height:44px</code>，视觉尺寸可通过负 margin 保持纤细。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 09 -->
+<section class="sec anchor" id="s9">
+  <div class="sec-head"><span class="sec-no">09</span><h2>可访问性达标清单（WCAG 2.1 AA）</h2><span class="lead">默认目标：所有设计交付至少满足 AA；下面每一项都给出可执行的验证方式。</span></div>
+  <div class="tbl-wrap">
+    <table><thead><tr><th style="width:20%">条款</th><th style="width:30%">现状</th><th style="width:28%">目标</th><th style="width:22%">验证方式</th></tr></thead><tbody>
+      <tr><td>1.4.3 对比度（正文 4.5:1）</td><td><code>--accent</code> 文字 2.64–2.84:1；<code>--faint</code> 约 2.5:1；亮色硬编码绿 3.30:1</td><td>拆分 brand / brand-text；faint 提亮；状态色全部走 <code>-text</code> 令牌</td><td>对比度计算 + 暗/亮主题逐屏抽查</td></tr>
+      <tr><td>1.4.11 非文本对比度 3:1</td><td>焦点环缺失、边框 <code>#2A2A2A</code> 与背景过近</td><td>2px 焦点环、输入框与卡片边界 ≥ 3:1</td><td>截图取色 + 键盘走查</td></tr>
+      <tr><td>2.4.7 焦点可见</td><td>0 处 <code>:focus-visible</code>，表单 <code>outline:none</code></td><td>统一焦点环并覆盖 tooltip 的 focus 触发</td><td>纯 Tab 遍历全部页面</td></tr>
+      <tr><td>1.1.1 / 4.1.2 名称与角色</td><td>10 个图标链接无名称；<code>role="menu"</code> 子项无 <code>menuitem</code>；Dialog 无 <code>aria-labelledby</code></td><td>全部可交互元素具备可访问名称与正确 role</td><td>读屏（NVDA / VoiceOver）朗读走查</td></tr>
+      <tr><td>2.1.1 / 2.1.2 键盘与焦点陷阱</td><td>8 处 <code>window.confirm</code>；弹层无 Escape / 陷阱；<code>&lt;li onClick&gt;</code> 不可聚焦</td><td>统一 Dialog / Menu 契约；可点击行键盘可达</td><td>Enter / Space / Esc / 方向键全路径测试</td></tr>
+      <tr><td>2.5.5 触摸目标 44px</td><td>20 / 26 / 28 / 30px 多种小热区</td><td>所有交互元素 ≥ 44×44px</td><td>DevTools 量测 + 真机点按</td></tr>
+      <tr><td>1.4.4 文本缩放 200%</td><td>多处 <code>calc(100vh - Npx)</code> 固定高度、<code>overflow:hidden</code></td><td>布局可纵向扩展，不截断内容</td><td>浏览器缩放 / 字号放大到 200%</td></tr>
+      <tr><td>2.3.3 减少动效</td><td>无 <code>prefers-reduced-motion</code></td><td>统一关闭过渡与动画</td><td>系统「减少动态效果」开关</td></tr>
+      <tr><td>3.3.1 / 3.3.2 错误与标签</td><td>placeholder 当标签；<code>.alert</code> 无 <code>role="alert"</code></td><td>label 关联、错误信息可读屏播报、字段级提示</td><td>提交空表单 / 错误密码路径</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="sec anchor" id="s10">
+  <div class="sec-head"><span class="sec-no">10</span><h2>落地路线与验收</h2><span class="lead">按「先止血、再建模、后打磨」三阶段推进，每阶段都有可独立验收的产出。</span></div>
+  <div class="phases" style="margin-bottom:var(--s6)">
+    <div class="phase"><div class="ph">PHASE 0 · 止血</div><h3>修复确定性缺陷</h3><ul>
+      <li>补齐 4 个未定义颜色变量，或直接切换到语义状态令牌</li>
+      <li>加入全局 <code>:focus-visible</code> 焦点环，移除表单 <code>outline:none</code></li>
+      <li>为图标导航加 <code>aria-label</code> 与 focus 触发的 tooltip</li>
+      <li>拆解 <code>&lt;Link&gt;</code> 内嵌 <code>&lt;button&gt;</code>，删除按钮常驻 + 44px 热区</li>
+      <li>Dialog / Menu 补齐 Escape、焦点陷阱、语义标注</li>
+    </ul><div class="goal">验收：P0 五项全清；纯键盘可完成「登录 → 新建岗位 → 编辑 → 删除」闭环。</div></div>
+    <div class="phase"><div class="ph">PHASE 1 · 建模</div><h3>令牌化与组件抽取</h3><ul>
+      <li>拆 <code>tokens.css / base.css / layout.css</code>，引入 <code>@layer</code> 层叠顺序</li>
+      <li>收敛 16 种字号 → 7 级、15 种圆角 → 5 级、5 个断点 → 4 级</li>
+      <li>状态色 5 套 → 1 套 <code>StatusBadge</code>；清理重复选择器与死样式</li>
+      <li>落地 Button / TextField / Card / Dialog 四个高频组件，优先替换首页与岗位页</li>
+      <li>统一顶栏、面包屑、1120px 内容宽度</li>
+    </ul><div class="goal">验收：新增一个页面时不再需要写任何新的颜色 / 字号 / 圆角裸值。</div></div>
+    <div class="phase"><div class="ph">PHASE 2 · 打磨</div><h3>体验完整度与性能</h3><ul>
+      <li>补齐骨架屏、按钮 loading / active、错误与空状态引导</li>
+      <li>移动优先断点重做，底部 Tab 与抽屉导航</li>
+      <li>Unicode 字符图标迁移为内联 SVG sprite</li>
+      <li>简历缩略图改为静态图缓存，去掉按行 iframe</li>
+      <li>暗 / 亮主题全页走查，接入 <code>prefers-color-scheme</code> 作为首次默认值</li>
+    </ul><div class="goal">验收：AA 清单逐项通过；320px / 200% 缩放 / 双主题无布局溢出。</div></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card pad"><h3 style="font-size:15px;margin-bottom:var(--s3)">验证命令</h3>
+      <pre style="margin-top:0"><code>npm run dev      # 前端 5173 / API 3000（DEV_SKIP_AUTH）
+npm test         # vitest 全量用例
+npm run build    # tsc -p tsconfig.json && vite build</code></pre>
+      <p class="tiny muted" style="margin-top:10px">本次评审为<b>静态代码分析</b>，未启动应用做浏览器实测。上线前请在真实浏览器中按上述命令启动，并逐项目视检查 P0-01 的 6 种状态徽章与 P0-02 的键盘焦点环。</p>
+    </div>
+    <div class="card pad"><h3 style="font-size:15px;margin-bottom:var(--s3)">设计 QA 走查清单</h3>
+      <ul class="clean">
+        <li>逐页对比组件圆角、内边距、标题字号，记录偏差数（目标 0）</li>
+        <li>暗 / 亮主题各截一次首页、岗位页、简历库、编辑器</li>
+        <li>纯键盘 Tab 走完主路径；打开每个菜单与弹窗按 Escape</li>
+        <li>读屏朗读导航项与表单标签；检查空态与错误态播报</li>
+        <li>320 / 768 / 1440px 三档宽度 + 200% 文本缩放</li>
+        <li>用对比度工具抽检全部语义状态文字（≥ 4.5:1）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="sec anchor" id="s11">
+  <div class="sec-head"><span class="sec-no">11</span><h2>附录 · 证据索引</h2><span class="lead">所有结论均可回到以下文件与行号复核。</span></div>
+  <div class="tbl-wrap">
+    <table><thead><tr><th style="width:28%">文件</th><th style="width:20%">行号</th><th>说明</th></tr></thead><tbody>
+      <tr><td><code>src/web/styles.css</code></td><td>1–79</td><td>双主题变量体系；<code>--_*</code> primitive 清单；字体栈与 h1/h2 定义</td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>249–280 / 772–801</td><td>表单 <code>outline:none</code>、全局 button 样式、select 内联 chevron</td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>355–381 / 426–553</td><td>仅 hover 的 tooltip；未使用的 <code>.sidebar-*</code> / <code>.icon-rail</code> 样式</td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>692 / 1203 / 1368–1483 / 1640 / 1941 / 2136</td><td><code>.list li.selected</code>、<code>.detail-section</code>、<code>.form-grid</code> 重复定义；<code>.home-*</code> 死样式</td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>934–951 / 1086–1092 / 1497–1517 / 1613–1618 / 1715–1720</td><td>5 套语义色映射 + 硬编码绿/橙 + 未定义变量 <code>--_gray/blue/green/red</code></td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>879 / 885 / 1113–1122 / 1746–1770</td><td>预览区硬编码底色；缩略图 iframe；20px 且默认隐藏的删除按钮</td></tr>
+      <tr><td><code>src/web/styles.css</code></td><td>998 / 1241 / 1363 / 1981 / 2025 / 2138 / 2244 / 2340</td><td>10 处媒体查询，共 5 个不同断点值</td></tr>
+      <tr><td><code>src/web/Layout.tsx</code></td><td>7–28 / 50–59 / 79–164</td><td>GROUPS 分组未使用；图标导航缺可访问名称；账户菜单无键盘管理</td></tr>
+      <tr><td><code>src/web/pages/Applications.tsx</code></td><td>161–185 / 180</td><td>Link 内嵌 button；<code>window.confirm</code></td></tr>
+      <tr><td><code>src/web/pages/Library.tsx</code></td><td>44–108 / 295–299 / 577–593 / 558</td><td>RowMenu 无键盘管理；<code>&lt;li onClick&gt;</code>；Modal 无焦点管理；原生 confirm</td></tr>
+      <tr><td><code>src/web/pages/Home.tsx</code></td><td>71–72 / 195–213</td><td>纯文本加载态；StatCard 是唯一接近组件化的封装</td></tr>
+      <tr><td><code>src/web/pages/Account.tsx</code></td><td>10–15 / 138–159</td><td>emoji 图标；主题选择卡片（机制本身设计良好，可保留）</td></tr>
+      <tr><td><code>src/web/theme.ts</code></td><td>21–79</td><td>主题注册 / 应用 / 缓存 / 服务端同步；<b>建议保留</b>，仅需扩展令牌</td></tr>
+      <tr><td><code>src/web/main.tsx</code></td><td>5–9</td><td>渲染前应用缓存主题，避免首屏闪烁；<b>建议保留</b></td></tr>
+    </tbody></table>
+  </div>
+  <div class="note" style="margin-top:var(--s6)"><b>值得保留的现有资产：</b>主题注册与服务端同步机制（<code>theme.ts</code>）、首屏防闪烁（<code>main.tsx</code>）、CSS 变量驱动的双主题思路、零图标网络请求、已实现的内联 Modal 与 <code>loading="lazy"</code> 缩略图。优化是<b>在现有机制上建立契约</b>，不是推倒重来。</div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <span>CareerAgent · UI 设计评审与优化方案 · 2026-11-10</span>
+  <span>UI Designer（像素君）｜依据：src/web 静态代码 + WCAG 2.1 AA 对比度实测</span>
+</footer>
+
+<script>
+(function () {
+  // 1) 问题清单按严重度筛选（默认显示全部，无 JS 时优雅降级）
+  var buttons = document.querySelectorAll('.fbtn');
+  var scopes = document.querySelectorAll('.filter-scope, .finding');
+  var labels = { all: '全部问题', P0: '仅 P0 严重', P1: '仅 P1 结构', P2: '仅 P2 体验' };
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var f = btn.getAttribute('data-filter');
+      buttons.forEach(function (b) {
+        var on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+      scopes.forEach(function (it) {
+        it.classList.toggle('hidden', f !== 'all' && it.getAttribute('data-level') !== f);
+      });
+      var live = document.getElementById('filter-live');
+      if (live) live.textContent = '当前视图：' + (labels[f] || '全部问题');
+    });
+  });
+
+  // 2) 代码复制（file:// 下 clipboard 可能受限，降级为选中文本）
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var code = btn.parentElement.querySelector('code');
+      if (!code) return;
+      var text = code.innerText;
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = '已复制';
+        setTimeout(function () { btn.textContent = old; }, 1600);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(code, btn); });
+      } else {
+        fallback(code, btn);
+      }
+    });
+  });
+  function fallback(code, btn) {
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      var sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(range);
+      btn.textContent = '已选中，请 Ctrl+C';
+      setTimeout(function () { btn.textContent = '复制'; }, 2200);
+    } catch (e) { btn.textContent = '复制失败'; }
+  }
+
+  // 3) 目录当前章节高亮
+  var links = Array.prototype.slice.call(document.querySelectorAll('.tabbar a'));
+  var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if ('IntersectionObserver' in window && sections.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) {
+          var on = a.getAttribute('href') === '#' + en.target.id;
+          a.style.color = on ? 'var(--brand-text)' : '';
+          a.style.borderBottomColor = on ? 'var(--brand)' : '';
+          a.style.fontWeight = on ? '650' : '';
+        });
+      });
+    }, { rootMargin: '-90px 0px -70% 0px' });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>

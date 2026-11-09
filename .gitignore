@@ -12,6 +12,8 @@ backups/
 # 构建产物
 dist-server/
 dist-web/
+desktop/dist-main/
+release/
 drizzle/generated/
 cloud/sync-cloudbase/dist/
 cloud/sync-server/dist/

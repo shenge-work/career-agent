@@ -8,8 +8,12 @@ export interface MigrationClient {
   query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
 }
 
-export function migrationsDir(): string {
-  return path.resolve(process.cwd(), 'drizzle');
+/**
+ * 迁移 SQL 目录。开发态是 `<cwd>/drizzle`；安装包里 drizzle/ 位于只读的 app 目录，
+ * 由桌面端通过 CAREER_AGENT_MIGRATIONS_DIR 显式指过去（不能依赖安装包的 CWD）。
+ */
+export function migrationsDir(env: NodeJS.ProcessEnv = process.env): string {
+  return path.resolve(env.CAREER_AGENT_MIGRATIONS_DIR || path.join(process.cwd(), 'drizzle'));
 }
 
 /**

@@ -4,6 +4,8 @@
   "private": true,
   "type": "commonjs",
   "description": "CareerAgent - 个人求职 Agent 工作台（本地服务器 + 账号行级隔离）",
+  "author": "CareerAgent",
+  "main": "desktop/dist-main/main.js",
   "scripts": {
     "dev": "concurrently -k -n server,web -c gray,white \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "DEV_SKIP_AUTH=true ts-node -r tsconfig-paths/register src/server/main.ts",
@@ -15,7 +17,15 @@
     "seed:user": "ts-node src/server/db/seed-user.ts",
     "import:v1": "ts-node src/server/db/import-v1.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "desktop:icons": "node desktop/scripts/generate-icons.mjs",
+    "desktop:tsc": "tsc -p desktop/tsconfig.json",
+    "desktop:build": "npm run build && npm run desktop:tsc",
+    "desktop:dev": "npm run desktop:tsc && node desktop/scripts/launch.cjs --desktop-dev",
+    "desktop:smoke": "npm run desktop:build && node desktop/scripts/launch.cjs --smoke",
+    "desktop:pack:win": "npm run desktop:build && electron-builder --win --x64",
+    "desktop:pack:win:dir": "npm run desktop:build && electron-builder --win --x64 --dir",
+    "desktop:pack:mac": "npm run desktop:build && electron-builder --mac --x64 --arm64"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.15",
@@ -42,6 +52,8 @@
     "@vitejs/plugin-react": "^6.2.1",
     "concurrently": "^9.0.0",
     "drizzle-kit": "^0.31.11",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "pg": "^8.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

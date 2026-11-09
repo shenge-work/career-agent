@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>首次运行 · CareerAgent</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #f6f6f7; color: #17181c; font: 14px/1.6 -apple-system, BlinkMacSystemFont,
+      "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .card {
+      width: min(460px, calc(100vw - 48px)); background: #fff; border: 1px solid #e5e5e8;
+      border-radius: 14px; padding: 34px 36px 30px; box-shadow: 0 12px 36px rgba(20,20,25,.06);
+    }
+    .mark { width: 38px; height: 38px; border-radius: 10px; background: #17181c; color: #fff;
+      display: grid; place-items: center; font-weight: 700; letter-spacing: -.5px; margin-bottom: 20px; }
+    h1 { margin: 0 0 6px; font-size: 21px; font-weight: 650; }
+    .lead { margin: 0 0 24px; color: #6b6d75; font-size: 13px; }
+    label { display: block; font-size: 12px; color: #4a4c54; margin: 0 0 6px; }
+    input {
+      width: 100%; height: 38px; padding: 0 11px; border: 1px solid #dcdde2; border-radius: 8px;
+      background: #fff; color: #17181c; font: inherit; outline: none; margin-bottom: 16px;
+    }
+    input:focus { border-color: #17181c; box-shadow: 0 0 0 3px rgba(23,24,28,.07); }
+    .hint { margin: -9px 0 16px; font-size: 11px; color: #8b8d95; }
+    button {
+      width: 100%; height: 40px; border: 0; border-radius: 8px; background: #17181c; color: #fff;
+      font: inherit; font-weight: 600; cursor: pointer; margin-top: 4px;
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    .msg { min-height: 20px; margin: 12px 0 0; font-size: 12px; color: #b4232c; }
+    .foot { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid #eeeef1;
+      font-size: 11px; color: #8b8d95; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">CA</div>
+    <h1>欢迎使用 CareerAgent</h1>
+    <p class="lead">第一次启动，需要先创建一个本地管理员账号。简历、公司档案与附件都只保存在这台电脑上，不会上传。</p>
+    <form id="form" autocomplete="off">
+      <label for="email">登录邮箱</label>
+      <input id="email" type="email" required placeholder="me@local.test" />
+      <label for="name">显示名（可选）</label>
+      <input id="name" type="text" maxlength="100" placeholder="怎么称呼你" />
+      <label for="password">密码</label>
+      <input id="password" type="password" required minlength="8" placeholder="至少 8 位" />
+      <div class="hint">密码用 Argon2id 加盐后只存本机数据库，请自行妥善保管；忘记密码可用命令行 seed:user 重置。</div>
+      <label for="confirm">确认密码</label>
+      <input id="confirm" type="password" required minlength="8" placeholder="再输一次" />
+      <button id="submit" type="submit">创建账号并进入</button>
+      <p class="msg" id="msg" role="alert"></p>
+    </form>
+    <p class="foot">此页面仅在数据库里没有任何账号时出现，创建完成后会自动关闭初始化入口。</p>
+  </div>
+  <script>
+    (function () {
+      var form = document.getElementById('form');
+      var btn = document.getElementById('submit');
+      var msg = document.getElementById('msg');
+      function fail(text) { msg.textContent = text; btn.disabled = false; btn.textContent = '创建账号并进入'; }
+      function post(url, body) {
+        return fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        msg.textContent = '';
+        var email = document.getElementById('email').value.trim();
+        var password = document.getElementById('password').value;
+        var confirm = document.getElementById('confirm').value;
+        var displayName = document.getElementById('name').value.trim();
+        if (password.length < 8) return fail('密码至少 8 位');
+        if (password !== confirm) return fail('两次输入的密码不一致');
+        btn.disabled = true; btn.textContent = '正在创建…';
+        try {
+          var res = await post('/api/setup/bootstrap', { email: email, password: password, displayName: displayName });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) return fail(data.message || ('创建失败（HTTP ' + res.status + '）'));
+          // 建号后自动登录；即使登录异常也跳回主页面，用户仍可手动登录。
+          try { await post('/api/auth/login', { email: email, password: password }); } catch (err) { /* 交给登录页 */ }
+          window.location.href = '/';
+        } catch (err) {
+          fail('无法连接本地服务：' + (err && err.message ? err.message : String(err)));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -118,9 +118,16 @@ export class CollectService {
     return new Promise((resolve) => {
       let child;
       try {
-        child = spawn(process.execPath, [script, ...args], {
+        // Electron 打包后 process.execPath 指向应用可执行文件，必须加
+        // ELECTRON_RUN_AS_NODE=1 才能把它当 Node 解释器启动采集脚本；
+        // 普通 node 环境保持原样（也支持 CAREER_AGENT_NODE_BIN 显式指定解释器）。
+        const isElectron = Boolean((process.versions as any).electron);
+        const childEnv = isElectron
+          ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+          : process.env;
+        child = spawn(process.env.CAREER_AGENT_NODE_BIN || process.execPath, [script, ...args], {
           cwd: findLegacyRoot() || process.cwd(),
-          env: process.env,
+          env: childEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
       } catch {

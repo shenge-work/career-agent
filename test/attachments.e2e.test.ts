@@ -23,17 +23,20 @@ import { HlcClock, parseHlc } from '../src/server/sync/hlc';
 describe('本地存储基础设施', () => {
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
+  // resolveDataDirs 走 path.resolve，Windows 上 '/tmp/...' 会变成 'C:\tmp\...'；
+  // 断言用同一套解析规则，避免把平台差异当成回归。
   it('数据目录：显式 root 下 pgdata 与 blobs 并列', () => {
+    const root = path.resolve('/tmp/ca-data');
     expect(resolveDataDirs({ CAREER_AGENT_DATA_DIR: '/tmp/ca-data' })).toEqual({
-      root: '/tmp/ca-data',
-      pgdata: '/tmp/ca-data/pgdata',
-      blobs: '/tmp/ca-data/blobs',
+      root,
+      pgdata: path.join(root, 'pgdata'),
+      blobs: path.join(root, 'blobs'),
     });
   });
 
   it('数据目录：未设 root 时 blobs 与 PGDATA 并列', () => {
     const dirs = resolveDataDirs({ PGDATA: '/tmp/ca-data/pgdata' });
-    expect(dirs.blobs).toBe('/tmp/ca-data/blobs');
+    expect(dirs.blobs).toBe(path.join(path.resolve('/tmp/ca-data'), 'blobs'));
   });
 
   it('magic number 判定，不采信扩展名；SVG 强制非 inline', () => {

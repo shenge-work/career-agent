@@ -13,6 +13,20 @@
 
 ## [Unreleased]
 
+### 新增（2026-11-10 · Windows / macOS 桌面客户端）
+
+- **Electron 桌面壳**（`desktop/` + `electron-builder.yml`）：主进程管窗口 / 菜单 / 单实例，
+  utility process 在 `127.0.0.1:<系统分配端口>` 跑同一个 NestJS + PGlite 服务并同源托管
+  `dist-web`，业务代码零重写。`asar: false` 以保证 PGlite wasm 与 argon2 原生模块可用。
+- **首次运行向导**：空库时自动打开 `desktop/setup.html` 建本地管理员账号并自动登录；
+  `GET /api/setup/status` / `POST /api/setup/bootstrap` 仅在 `users` 为空时可写。
+- **服务端打包适配**：`main.ts` 拆出 `createServerApp()`；迁移目录支持
+  `CAREER_AGENT_MIGRATIONS_DIR`；BOSS 采集脚本在 Electron 下加 `ELECTRON_RUN_AS_NODE=1`。
+  数据目录自动落到 `%APPDATA%\CareerAgent\data` / `~/Library/Application Support/CareerAgent/data`。
+- **命令与文档**：`desktop:dev / desktop:smoke / desktop:pack:win / desktop:pack:mac`、
+  自动生成 ico/icns/png 图标、[docs/桌面客户端.md](./docs/桌面客户端.md)。
+  仍为手动打包，未恢复 CI 三平台发版。
+
 ### 变更（2026-11-04 · v2 升级为项目主目录，v1 退役）
 
 - **v1 代码全部移除，v2 上移为仓库根**：项目切换为纯本地服务器形态

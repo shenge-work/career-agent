@@ -1,0 +1,79 @@
+# CareerAgent 桌面客户端打包配置
+# Windows: npm run desktop:pack:win   macOS: npm run desktop:pack:mac
+#
+# asar=false 是刻意选择：PGlite 的 wasm/data、@node-rs/argon2 的 .node、
+# 以及内嵌服务进程对 app/node_modules 的普通 Node 解析，都要求真实文件路径。
+
+appId: com.careeragent.desktop
+productName: CareerAgent
+copyright: Copyright (c) 2026 CareerAgent
+
+asar: false
+npmRebuild: false
+
+directories:
+  output: release
+  buildResources: desktop/build
+
+files:
+  - "**/*"
+  - "!**/*.map"
+  - "!src/**"
+  - "!test/**"
+  - "!docs/**"
+  - "!skills/**"
+  - "!scripts/**"
+  - "!cloud/**"
+  - "!drizzle/generated/**"
+  - "!desktop/src/**"
+  - "!desktop/scripts/**"
+  - "!release/**"
+  - "!.tmp-*/**"
+  - "!pgdata/**"
+  - "!pgdata-corrupt*/**"
+  - "!blobs/**"
+  - "!backups/**"
+  - "!data/**"
+  - "!node_modules/.cache/**"
+  - "!*.md"
+  - "!*.log"
+  - "!vite.config.mts"
+  - "!vitest.config.mts"
+  - "!drizzle.config.ts"
+  - "!tsconfig*.json"
+
+win:
+  icon: desktop/build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: CareerAgent-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CareerAgent
+
+portable:
+  artifactName: CareerAgent-${version}-portable.${ext}
+
+mac:
+  icon: desktop/build/icon.icns
+  category: public.app-category.productivity
+  # 无 Apple Developer 证书时不签名；用户首次打开需右键「打开」或 xattr -cr。
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: CareerAgent-${version}-mac-${arch}.${ext}
+
+dmg:
+  title: CareerAgent

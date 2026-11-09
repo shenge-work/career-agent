@@ -32,6 +32,23 @@ npm run dev                 # 前端 5173 / API 3000
 | `npm run seed:user` | CLI 建号 |
 | `npm run import:v1` | 从旧 `data/` 导入（迁移工具，已完成历史使命） |
 
+### 🖥️ 桌面客户端（Windows / macOS）
+
+Electron 壳内嵌同一个 NestJS 服务，数据仍全部留在本机。完整说明见
+[docs/桌面客户端.md](./docs/桌面客户端.md)。
+
+```bash
+npm run desktop:dev          # 开发壳：先 npm run dev，再开一个终端跑它
+npm run desktop:smoke        # 无窗口自检：内嵌服务 + SPA + 向导页
+npm run desktop:pack:win     # Windows NSIS 安装包 + portable exe → release/
+npm run desktop:pack:win:dir # Windows 免安装绿色版 → release/win-unpacked/
+npm run desktop:pack:mac     # macOS dmg + zip（需在 macOS 上执行）
+```
+
+首次启动会自动打开建号向导（库里没有任何账号时）；数据写在
+Windows `%APPDATA%\CareerAgent\data` / macOS `~/Library/Application Support/CareerAgent/data`，
+与安装目录分离。
+
 ## ✨ 当前功能
 
 **账号与数据**：多账号登录（Argon2id + HttpOnly 会话）、全部业务数据按账号行级隔离
@@ -375,7 +392,7 @@ SYNC_BASE_URL=http://127.0.0.1:8787 SYNC_SKIP_BLOB=1 npx ts-node scripts/sync-sm
 以上都不影响当前单机功能：断网、无云账号时本地全部可用。完整技术方案见
 `docs/技术设计方案/云同步技术设计方案.md`。
 
-**数据目录**：打包时务必设置 `CAREER_AGENT_DATA_DIR` 到用户可写的绝对路径
+**数据目录**：桌面客户端已自动把 `CAREER_AGENT_DATA_DIR` 设到用户可写的绝对路径
 （macOS `~/Library/Application Support/CareerAgent`、Windows `%APPDATA%\CareerAgent`），
 下挂 `pgdata/` 与 `blobs/`；不要落在 `.app` / `Program Files`（签名只读、写入要管理员权限）。
 开发态不设时沿用 `./pgdata`，`blobs/` 与之并列。备份 / 卸载 / 导出只需拷这一个目录。
@@ -413,7 +430,8 @@ $env:DB_CLIENT_PORT=55432; npm start
 ## 🔒 安全边界（内测形态）
 
 仅监听 `127.0.0.1`；Host/Origin 回环守卫防 DNS rebinding 与跨站写；会话 cookie
-HttpOnly；AI 上游只放行 https 公网 / http 回环。**≤10 人本机内测安全模型**——对外部署前
+HttpOnly；AI 上游只放行 https 公网 / http 回环。桌面版首次建号端点 `/api/setup/bootstrap`
+只在 `users` 为空时可写，等价于本机 `seed:user` CLI。**≤10 人本机内测安全模型**——对外部署前
 先过 [docs/v2重构归档/04-运行维护与后续路线.md](./docs/v2重构归档/04-运行维护与后续路线.md) §6 的内测前清单。
 
 ## 📁 文档
@@ -421,12 +439,13 @@ HttpOnly；AI 上游只放行 https 公网 / http 回环。**≤10 人本机内�
 - [docs/v2重构归档/](./docs/v2重构归档/README.md)：v1→v2 重构全记录（选型、架构、逐阶段验收、运维）
 - [docs/技术设计方案/](./docs/技术设计方案/)：技术设计方案（含 [云同步技术设计方案](./docs/技术设计方案/云同步技术设计方案.md)、[数据采集与统一导入](./docs/技术设计方案/数据采集与统一导入-技术设计方案.md)）
 - [docs/需求文档/](./docs/需求文档/README.md)：需求清单（D/N 编号）
+- [docs/桌面客户端.md](./docs/桌面客户端.md)：Windows / macOS 客户端架构、打包、数据目录与排障
 - [ROADMAP.md](./ROADMAP.md)：路线图（含 v1 退役后待补能力清单）
 - [CHANGELOG.md](./CHANGELOG.md)：变更记录
 
 ## ⚖️ 已退役（v1 能力，不再维护）
 
-file:// 单文件离线版、Tauri 桌面 / 安卓打包、CI 三平台发版、飞书同步（OAuth / Device Flow /
+file:// 单文件离线版、**v1 的** Tauri 桌面 / 安卓打包（v2 桌面端已用 Electron 重新实现，见上）、CI 三平台发版、飞书同步（OAuth / Device Flow /
 云盘版本）、localStorage / IndexedDB 降级存储、本地 `data/*.json` 文件写入。
 其中「投递体检、JD 匹配分析、Word/TXT/MD 导出、撤销/重做、主题模板」等编辑能力
 列于 [ROADMAP](./ROADMAP.md) 待在 v2 分期重建。
