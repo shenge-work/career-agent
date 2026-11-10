@@ -5,8 +5,10 @@
 # 注意：当前 electron-builder.yml 中 mac 的 identity: null（未签名），
 # 所以 macOS 产物未做 Apple 签名/公证，用户首次打开需右键「打开」或 `xattr -cr`。
 #
-# 诊断：打包若失败，把完整构建日志推到 ci-diag-win / ci-diag-mac 分支，
-# 以便本地用 git 读取（Actions API 受 token 权限限制无法直接拉取日志）。
+# 诊断：
+#  - 打包若失败，把完整构建日志推到 ci-diag-win / ci-diag-mac 分支；
+#  - 发布若失败，把发布结果（产物清单 + release view）推到 ci-diag-publish 分支，
+#    便于本地用 git 读取（Actions 日志 API 受 token 权限限制时仍有兜底）。
 
 name: Release
 
@@ -15,8 +17,14 @@ on:
     tags:
       - "v*"
 
+# 权限说明：
+#  - contents: write —— 创建/删除 GitHub Release，以及推送 ci-diag-* 诊断分支；
+#  - actions: write —— upload-artifact / download-artifact 都需要它来读写工作流产物，
+#    （之前只给了 contents: write，导致 download-artifact 列出 0 个产物、
+#      `ls` 失败、Create Release 被跳过、Release 始终未生成）
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build-win:
@@ -106,18 +114,54 @@ jobs:
     needs: [build-win, build-mac]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: List artifacts
-        run: ls -R artifacts
+      - name: List artifacts (non-fatal)
+        run: |
+          echo "=== artifact tree ==="
+          ls -laR artifacts || true
+          echo "=== collected files ==="
+          find artifacts -type f -print || true
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: CareerAgent ${{ github.ref_name }}
-          files: artifacts/**/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+        id: create
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find artifacts -type f)
+          echo "Found ${#FILES[@]} artifact file(s):"
+          printf '  %s\n' "${FILES[@]}"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::error::No artifacts to publish — download-artifact may have failed" >&2
+            exit 1
+          fi
+          TAG="${{ github.ref_name }}"
+          # 幂等：若已存在同名 Release 先删除再重建
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" -y
+          fi
+          gh release create "$TAG" \
+            --title "CareerAgent $TAG" \
+            --generate-notes \
+            "${FILES[@]}"
+      - name: Publish diagnostics
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.email "ci@careeragent.local"
+          git config user.name "CI Diag"
+          git checkout -B ci-diag-publish
+          {
+            echo "job.status: ${{ job.status }}"
+            echo "create.outcome: ${{ steps.create.outcome }}"
+            echo "=== artifacts ==="
+            find artifacts -type f -print 2>/dev/null || true
+            echo "=== release view ==="
+            gh release view "${{ github.ref_name }}" 2>&1 || true
+          } > publish-result.txt
+          git add -f publish-result.txt
+          git commit -m "diag: publish ${GITHUB_RUN_ID}" || echo "nothing to commit"
+          git push --force origin ci-diag-publish
