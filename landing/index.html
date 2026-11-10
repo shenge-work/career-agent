@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: MIT — Copyright (c) 2026 CareerAgent contributors -->
+
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -7,25 +9,25 @@
 
   <!-- SEO -->
   <title>CareerAgent · 让 AI 替你搞定求职杂活，你只管专注专业与面试</title>
-  <meta name="description" content="CareerAgent 让 AI 自动完成投递、公司调研、简历修改等繁杂琐事，求职者只需专注自身专业能力提升与面试训练。本地优先，数据不出本机，支持 Windows 与 macOS。" />
-  <meta name="keywords" content="CareerAgent,求职 Agent,AI 投递,AI 简历,面试训练,公司调研自动化,求职自动化,本地优先,隐私,Electron,Windows,macOS" />
+  <meta name="description" content="CareerAgent 让 AI 自动完成投递追踪、公司调研、简历修改等繁杂琐事，求职者只需专注自身专业能力提升与面试训练。本地优先，数据不出本机，支持端到端加密跨设备同步，支持 Windows 与 macOS。" />
+  <meta name="keywords" content="CareerAgent,求职 Agent,AI 投递,AI 简历,面试训练,公司调研自动化,求职自动化,本地优先,隐私,端到端加密,跨设备同步,内推管理,Electron,Windows,macOS" />
   <meta name="author" content="CareerAgent" />
-  <link rel="canonical" href="https://shenge-work.github.io/career-agent/" />
+  <link rel="canonical" href="https://career-agent-3gi.pages.dev/" />
 
   <!-- Open Graph / 社交分享 -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="CareerAgent" />
   <meta property="og:title" content="CareerAgent · 让 AI 替你搞定求职杂活，你只管专注专业与面试" />
   <meta property="og:description" content="投递、公司调研、改简历……这些繁杂又无意义的琐事交给 AI，求职者只专注自身专业能力提升与面试训练。支持 Windows 与 macOS。" />
-  <meta property="og:url" content="https://shenge-work.github.io/career-agent/" />
-  <meta property="og:image" content="https://shenge-work.github.io/career-agent/assets/og-cover.png" />
+  <meta property="og:url" content="https://career-agent-3gi.pages.dev/" />
+  <meta property="og:image" content="https://career-agent-3gi.pages.dev/assets/og-cover.png" />
   <meta property="og:locale" content="zh_CN" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="CareerAgent · 让 AI 替你搞定求职杂活" />
   <meta name="twitter:description" content="投递、调研、改简历交给 AI，你只专注专业能力与面试训练。个人求职 Agent 工作台。" />
-  <meta name="twitter:image" content="https://shenge-work.github.io/career-agent/assets/og-cover.png" />
+  <meta name="twitter:image" content="https://career-agent-3gi.pages.dev/assets/og-cover.png" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f46e5'/%3E%3Cpath d='M9 12a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M12 13h8M12 16h8M12 19h5' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
 
@@ -45,7 +47,7 @@
   <script defer
     src="https://cloud.umami.is/script.js"
     data-website-id="YOUR_WEBSITE_ID"
-    data-domains="shenge-work.github.io"></script>
+    data-domains="career-agent-3gi.pages.dev"></script>
   -->
 
   <link rel="stylesheet" href="css/style.css" />
@@ -99,7 +101,7 @@
             你只管提升专业、练好面试，<br />剩下的交给 AI
           </h1>
           <p class="hero-subtitle">
-            投递、调研公司、反复改简历……这些繁杂又无意义的工作，<br class="only-desktop" />
+            投递追踪、调研公司、反复改简历……这些繁杂又无意义的工作，<br class="only-desktop" />
             全部交给 AI 自动化完成。<strong>你只专注自身专业能力提升与面试训练。</strong>
           </p>
 
@@ -140,16 +142,17 @@
             </li>
             <li>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
+                <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path>
+                <path d="M9 12l2 2 4-4"></path>
               </svg>
-              AI 自动投递
+              跨设备加密同步
             </li>
             <li>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="8" r="4"></circle>
                 <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"></path>
               </svg>
-              专注自身专业
+              投递由你把关
             </li>
           </ul>
         </div>
@@ -271,8 +274,8 @@
                 <path d="M14 2v5h5"></path>
               </svg>
             </div>
-            <h3>AI 投递，不用你动手</h3>
-            <p>AI 自动投递、自动追踪进度、自动去重，你不再需要一家家复制粘贴、手动跟进。</p>
+            <h3>投递追踪，自动就绪</h3>
+            <p>投递状态、公司档案、进度跟进自动整理去重，你只需在关键节点把关，不再一家家手动核对。</p>
           </article>
 
           <article class="card solution-card">
@@ -343,7 +346,7 @@
             </div>
             <div class="feature-body">
               <h3>AI 自动投递追踪</h3>
-              <p>投递进度自动追踪，BOSS 直聘聊天自动采集入库并去重，你不再手动跟进每一家。</p>
+              <p>投递进度自动追踪，聊天记录一键导入归档并去重，投递的最终动作始终由你确认。</p>
             </div>
           </article>
 
@@ -412,8 +415,8 @@
               <p>本地服务器 + PGlite（PostgreSQL 兼容）数据库，简历、投递记录、公司档案全部存在你电脑的磁盘里。</p>
             </div>
             <div class="trust-item">
-              <h3>隐私默认</h3>
-              <p>无需注册账号，不上传云端。AI 的 Key、简历内容、聊天采集数据，都只留在你自己的电脑里。</p>
+              <h3>加密跨设备同步</h3>
+              <p>需要换设备时，用恢复码 + 端到端加密（E2EE）走「哑云」同步——云端只见密文，断云仍可正常使用。</p>
             </div>
             <div class="trust-item">
               <h3>AI 只做杂活</h3>
