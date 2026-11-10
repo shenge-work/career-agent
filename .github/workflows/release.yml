@@ -4,6 +4,9 @@
 #
 # 注意：当前 electron-builder.yml 中 mac 的 identity: null（未签名），
 # 所以 macOS 产物未做 Apple 签名/公证，用户首次打开需右键「打开」或 `xattr -cr`。
+#
+# 诊断：打包若失败，把完整构建日志推到 ci-diag-win / ci-diag-mac 分支，
+# 以便本地用 git 读取（Actions API 受 token 权限限制无法直接拉取日志）。
 
 name: Release
 
@@ -35,10 +38,21 @@ jobs:
           {
             echo "### Windows build log"
             echo '```'
-            tail -n 140 build-win.log
+            tail -n 250 build-win.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $RC
+      - name: Push diag log
+        if: always()
+        shell: bash
+        run: |
+          git config user.email "ci@careeragent.local"
+          git config user.name "CI Diag"
+          git checkout -B ci-diag-win
+          cp build-win.log win-log.txt 2>/dev/null || true
+          git add -f win-log.txt
+          git commit -m "diag: windows build ${GITHUB_RUN_ID}" || echo "nothing to commit"
+          git push --force origin ci-diag-win
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -65,10 +79,21 @@ jobs:
           {
             echo "### macOS build log"
             echo '```'
-            tail -n 140 build-mac.log
+            tail -n 250 build-mac.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $RC
+      - name: Push diag log
+        if: always()
+        shell: bash
+        run: |
+          git config user.email "ci@careeragent.local"
+          git config user.name "CI Diag"
+          git checkout -B ci-diag-mac
+          cp build-mac.log mac-log.txt 2>/dev/null || true
+          git add -f mac-log.txt
+          git commit -m "diag: macos build ${GITHUB_RUN_ID}" || echo "nothing to commit"
+          git push --force origin ci-diag-mac
       - uses: actions/upload-artifact@v4
         if: always()
         with:
