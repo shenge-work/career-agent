@@ -1,0 +1,74 @@
+# CareerAgent 桌面客户端发布流水线
+# 在推送 tag（v*）时，分别在 Windows / macOS runner 上打包，
+# 并将产物（nsis 安装包、portable、dmg、zip）发布到 GitHub Releases。
+#
+# 注意：当前 electron-builder.yml 中 mac 的 identity: null（未签名），
+# 所以 macOS 产物未做 Apple 签名/公证，用户首次打开需右键「打开」或 `xattr -cr`。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    name: Build Windows (nsis + portable)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Package Windows
+        run: npm run desktop:pack:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/*.{exe,zip}
+          if-no-files-found: ignore
+
+  build-mac:
+    name: Build macOS (dmg + zip)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Package macOS
+        run: npm run desktop:pack:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: release/*.{exe,dmg,zip}
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-win, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: List artifacts
+        run: ls -R artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: CareerAgent ${{ github.ref_name }}
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
