@@ -1,0 +1,48 @@
+
+> career-agent@0.1.0 desktop:pack:win
+> npm run desktop:build && electron-builder --win --x64 --publish never
+
+
+> career-agent@0.1.0 desktop:build
+> npm run build && npm run desktop:tsc
+
+
+> career-agent@0.1.0 build
+> tsc -p tsconfig.json && vite build
+
+[36mvite v8.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 93 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-web/index.html                   0.70 kB │ gzip:   0.45 kB
+dist-web/assets/index-BY68BjrE.css   54.18 kB │ gzip:   9.97 kB
+dist-web/assets/index-DdJZysxf.js   472.23 kB │ gzip: 140.48 kB
+
+[32m✓ built in 336ms[39m
+
+> career-agent@0.1.0 desktop:tsc
+> tsc -p desktop/tsconfig.json
+
+  • electron-builder  version=26.18.0 os=10.0.26100
+  • loaded configuration  file=D:\a\career-agent\career-agent\electron-builder.yml
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=45.2.3 appOutDir=release\win-unpacked
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=D:\a\career-agent\career-agent\release\win-unpacked
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • searching for node modules  pm=npm searchDir=D:\a\career-agent\career-agent
+  • duplicate dependency references  dependencies=["strtok3@10.7.0","token-types@6.2.0","rxjs@7.8.2","@nestjs/common@12.3.2","rxjs@7.8.2","uid@2.0.2","fast-querystring@1.1.2","find-my-way@9.10.0","@fastify/multipart@10.1.8","@nestjs/common@12.3.2","@nestjs/core@12.3.2","@fastify/ajv-compiler@4.0.7","@fastify/fast-json-stringify-compiler@5.1.1","@fastify/proxy-addr@5.1.2","avvio@9.3.1","fast-json-stringify@7.2.1","find-my-way@9.10.0","light-my-request@6.8.0","pino@10.4.0","fast-querystring@1.1.2","pg@8.23.1","pg-types@2.2.0","ajv@8.20.0","fast-json-stringify@7.2.1","ajv-formats@3.0.1","ajv@8.20.0","find-my-way@9.10.0","light-my-request@6.8.0"]
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\CareerAgent.exe
+  • building        target=nsis file=release\CareerAgent-0.1.0-win-x64.exe archs=x64 oneClick=false perMachine=false
+  • downloaded      label=7zip-win-x64.tar.gz progress=100%
+  • downloaded      label=nsis-3.0.4.1.7z progress=100%
+  • no code signing certificate configured, signing is skipped  path=C:\Users\RUNNER~1\AppData\Local\Temp\t-TGrD1c\elevate-staging-1\resources\elevate.exe
+  • downloaded      label=nsis-resources-3.4.1.7z progress=100%
+  • no code signing certificate configured, signing is skipped  path=release\CareerAgent-0.1.0-win-x64.__uninstaller.exe
+  • no code signing certificate configured, signing is skipped  path=release\CareerAgent-0.1.0-win-x64.exe
+  • building block map  blockMapFile=release\CareerAgent-0.1.0-win-x64.exe.blockmap
+  • building        target=portable file=release\CareerAgent-0.1.0-portable.exe archs=x64
+  • no code signing certificate configured, signing is skipped  path=C:\Users\RUNNER~1\AppData\Local\Temp\t-TGrD1c\elevate-staging-4\resources\elevate.exe
+  • no code signing certificate configured, signing is skipped  path=release\CareerAgent-0.1.0-portable.exe
