@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4f46e5" />
+
+  <!-- SEO -->
+  <title>CareerAgent · 让 AI 替你搞定求职杂活，你只管专注专业与面试</title>
+  <meta name="description" content="CareerAgent 让 AI 自动完成投递、公司调研、简历修改等繁杂琐事，求职者只需专注自身专业能力提升与面试训练。本地优先，数据不出本机，支持 Windows 与 macOS。" />
+  <meta name="keywords" content="CareerAgent,求职 Agent,AI 投递,AI 简历,面试训练,公司调研自动化,求职自动化,本地优先,隐私,Electron,Windows,macOS" />
+  <meta name="author" content="CareerAgent" />
+  <link rel="canonical" href="https://shenge-work.github.io/career-agent/" />
+
+  <!-- Open Graph / 社交分享 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="CareerAgent" />
+  <meta property="og:title" content="CareerAgent · 让 AI 替你搞定求职杂活，你只管专注专业与面试" />
+  <meta property="og:description" content="投递、公司调研、改简历……这些繁杂又无意义的琐事交给 AI，求职者只专注自身专业能力提升与面试训练。支持 Windows 与 macOS。" />
+  <meta property="og:url" content="https://shenge-work.github.io/career-agent/" />
+  <meta property="og:image" content="https://shenge-work.github.io/career-agent/assets/og-cover.png" />
+  <meta property="og:locale" content="zh_CN" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CareerAgent · 让 AI 替你搞定求职杂活" />
+  <meta name="twitter:description" content="投递、调研、改简历交给 AI，你只专注专业能力与面试训练。个人求职 Agent 工作台。" />
+  <meta name="twitter:image" content="https://shenge-work.github.io/career-agent/assets/og-cover.png" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f46e5'/%3E%3Cpath d='M9 12a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M12 13h8M12 16h8M12 19h5' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
+
+  <!--
+    ============================================================
+    Umami 访问统计（预留）
+    ------------------------------------------------------------
+    注册 https://umami.is 并添加你的站点后：
+    1. 取消下面这段 <script> 的注释
+    2. 把 data-website-id 替换成你自己的站点 ID
+    3. 把 src 里的域名替换成你的 Umami 实例地址（若为自托管）
+    Umami 会自动采集页面访问，并自动读取按钮上的
+    data-umami-event / data-umami-event-platform 属性完成下载计数。
+    ============================================================
+  -->
+  <!--
+  <script defer
+    src="https://cloud.umami.is/script.js"
+    data-website-id="YOUR_WEBSITE_ID"
+    data-domains="shenge-work.github.io"></script>
+  -->
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body id="top">
+
+  <!-- ======== 顶部导航 ======== -->
+  <header class="site-header">
+    <nav class="nav container" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="CareerAgent 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+            <path d="M8 8h8M8 12h8M8 16h4"></path>
+          </svg>
+        </span>
+        <span class="brand-name">CareerAgent</span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="打开菜单">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+
+      <div class="nav-menu" id="nav-menu">
+        <a class="nav-link" href="#pain">痛点</a>
+        <a class="nav-link" href="#features">功能</a>
+        <a class="nav-link" href="#trust">数据安全</a>
+        <a class="nav-link" href="#download">下载</a>
+        <a class="nav-link nav-link-github" href="https://github.com/shenge-work/career-agent" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ======== Hero 区 ======== -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span class="eyebrow-dot" aria-hidden="true"></span>
+            AI 求职 Agent · 把杂活交给 AI，把时间留给自己
+          </p>
+          <h1 class="hero-title">
+            你只管提升专业、练好面试，<br />剩下的交给 AI
+          </h1>
+          <p class="hero-subtitle">
+            投递、调研公司、反复改简历……这些繁杂又无意义的工作，<br class="only-desktop" />
+            全部交给 AI 自动化完成。<strong>你只专注自身专业能力提升与面试训练。</strong>
+          </p>
+
+          <div class="hero-cta">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/shenge-work/career-agent/releases/latest"
+              data-download-platform="windows"
+              data-umami-event="download"
+              data-umami-event-platform="windows"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M3 5.5l8-1.5v7.5H3V5.5zM13 3.6l8 1.4v7H13V3.6zM3 12.6h8v7.5l-8-1.5v-6zM13 12.6h8v7.8l-8-1.4v-6.4z"/>
+              </svg>
+              下载 Windows 版
+            </a>
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/shenge-work/career-agent/releases/latest"
+              data-download-platform="macos"
+              data-umami-event="download"
+              data-umami-event-platform="macos"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M16.7 12.9c0-2.2 1.8-3.2 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.7-.8-2.9-.8-1.5 0-2.8.9-3.6 2.2-1.5 2.7-.4 6.6 1.1 8.8.7 1.1 1.6 2.3 2.7 2.2 1.1 0 1.5-.7 2.8-.7 1.3 0 1.7.7 2.8.7 1.2 0 1.9-1.1 2.6-2.2.8-1.2 1.2-2.4 1.2-2.4s-2.4-.9-2.4-3.6zM14.9 6.2c.6-.7 1-1.7.9-2.7-.9 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.6 1 .1 2-.5 2.5-1.2z"/>
+              </svg>
+              下载 macOS 版
+            </a>
+          </div>
+
+          <ul class="hero-trust" aria-label="AI 求职工作台承诺">
+            <li>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path>
+                <path d="M9 12l2 2 4-4"></path>
+              </svg>
+              数据不出本机
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
+              </svg>
+              AI 自动投递
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"></path>
+              </svg>
+              专注自身专业
+            </li>
+          </ul>
+        </div>
+
+        <!-- Hero 产品示意（纯 CSS/SVG，无外部图片） -->
+        <div class="hero-visual" aria-hidden="true">
+          <div class="app-window">
+            <div class="app-window-bar">
+              <span class="dot dot-red"></span>
+              <span class="dot dot-yellow"></span>
+              <span class="dot dot-green"></span>
+              <span class="app-window-title">CareerAgent · 求职工作台</span>
+            </div>
+            <div class="app-window-body">
+              <aside class="app-side">
+                <span class="app-side-item is-active">投递追踪</span>
+                <span class="app-side-item">简历库</span>
+                <span class="app-side-item">公司档案</span>
+                <span class="app-side-item">内推管理</span>
+              </aside>
+              <div class="app-content">
+                <div class="app-row">
+                  <div class="app-avatar">A</div>
+                  <div class="app-row-main">
+                    <strong>某科技 · 高级前端工程师</strong>
+                    <span>已投递 · 3 天前</span>
+                  </div>
+                  <span class="badge badge-blue">待面试</span>
+                </div>
+                <div class="app-row">
+                  <div class="app-avatar">B</div>
+                  <div class="app-row-main">
+                    <strong>某数据 · 数据分析师</strong>
+                    <span>已投递 · 6 天前</span>
+                  </div>
+                  <span class="badge badge-gray">简历初筛</span>
+                </div>
+                <div class="app-row">
+                  <div class="app-avatar">C</div>
+                  <div class="app-row-main">
+                    <strong>某电商 · 产品经理</strong>
+                    <span>内推 · 待跟进</span>
+                  </div>
+                  <span class="badge badge-warn">即将逾期</span>
+                </div>
+                <div class="app-local">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path>
+                    <path d="M9 12l2 2 4-4"></path>
+                  </svg>
+                  本地数据库 · PGlite（PostgreSQL 兼容）
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 问题痛点区 ======== -->
+    <section class="section section-pain" id="pain">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-kicker">现状</p>
+          <h2 class="section-title">求职，正在偷走你本应用来成长的时间</h2>
+          <p class="section-desc">求职者最宝贵的资源是精力，却浪费在大量重复、机械、无意义的事务上。</p>
+        </div>
+
+        <div class="cards-grid cards-3">
+          <article class="card pain-card">
+            <div class="card-icon icon-slate">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5z"></path>
+                <path d="M14 2v5h5M9 13h6M9 17h4"></path>
+              </svg>
+            </div>
+            <h3>改简历，改到麻木</h3>
+            <p>同一个岗位反复改简历、调措辞、对齐 JD，机械重复、毫无成长，却占据了求职者大半的精力。</p>
+          </article>
+
+          <article class="card pain-card">
+            <div class="card-icon icon-slate">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18M7 15l3-4 3 2 4-6"></path>
+              </svg>
+            </div>
+            <h3>投递，投到失去耐心</h3>
+            <p>海投几十上百家，一家家复制粘贴、手动追踪进度，重复劳动吞噬了本该用来刷题、练面试的时间。</p>
+          </article>
+
+          <article class="card pain-card">
+            <div class="card-icon icon-slate">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="M21 21l-4.3-4.3M9 11h4M9 8h4"></path>
+              </svg>
+            </div>
+            <h3>调研公司，查到抓狂</h3>
+            <p>面试前到处搜公司信息、查 JD、找内推码，信息散落在各个角落，低效又无意义，关键时刻总是缺。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 解决方案区 ======== -->
+    <section class="section section-solution" id="solution">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-kicker">方案</p>
+          <h2 class="section-title">把杂活交给 AI，把时间还给你自己</h2>
+          <p class="section-desc">投递、调研、改简历这些「不得不做却无意义」的事，AI 全部自动化，你只专注真正值钱的两件事。</p>
+        </div>
+
+        <div class="cards-grid cards-3">
+          <article class="card solution-card">
+            <div class="card-icon icon-indigo">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5z"></path>
+                <path d="M14 2v5h5"></path>
+              </svg>
+            </div>
+            <h3>AI 投递，不用你动手</h3>
+            <p>AI 自动投递、自动追踪进度、自动去重，你不再需要一家家复制粘贴、手动跟进。</p>
+          </article>
+
+          <article class="card solution-card">
+            <div class="card-icon icon-indigo">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18"></path>
+                <path d="M7 15l3-4 3 2 4-6"></path>
+                <circle cx="16" cy="8" r="1.2"></circle>
+              </svg>
+            </div>
+            <h3>AI 调研，信息自动就绪</h3>
+            <p>AI 自动完成公司调研、JD 分析、面试简报，面试前资料自动备好，不用再到处翻找。</p>
+          </article>
+
+          <article class="card solution-card">
+            <div class="card-icon icon-indigo">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6M9 10h.01M15 10h.01"></path>
+              </svg>
+            </div>
+            <h3>AI 改简历，一键优化</h3>
+            <p>AI 按岗位 JD 自动改写简历、生成派生版，你只需把关方向，不再逐字逐句地磨。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 功能亮点区 ======== -->
+    <section class="section section-features" id="features">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-kicker">功能</p>
+          <h2 class="section-title">AI 替你干活，你只管提升自己</h2>
+          <p class="section-desc">一边是 AI 自动完成的求职杂活，一边是你真正该投入的专业成长与面试训练。</p>
+        </div>
+
+        <div class="features-grid">
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5z"></path>
+                <path d="M14 2v5h5M9 13h6M9 17h4"></path>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>AI 自动改简历</h3>
+              <p>按岗位 JD 自动改写简历、生成派生版本，A4 实时预览与 PDF 双导出，你只需把关方向。</p>
+            </div>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"></path>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>AI 公司调研</h3>
+              <p>自动完成公司六维调研、岗位 JD 分析、行业检索，面试前一键生成简报，情报自动就绪。</p>
+            </div>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18M7 15l3-4 3 2 4-6"></path>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>AI 自动投递追踪</h3>
+              <p>投递进度自动追踪，BOSS 直聘聊天自动采集入库并去重，你不再手动跟进每一家。</p>
+            </div>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="9" cy="8" r="3.2"></circle>
+                <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"></path>
+                <circle cx="17" cy="9" r="2.4"></circle>
+                <path d="M16 13.5c2.6.2 5 2 5 4.5"></path>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>内推管理自动化</h3>
+              <p>内推人、渠道、岗位、内推码、跟进节奏统一管理，逾期 / 待跟进自动提醒，不再靠脑子记。</p>
+            </div>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l1.7 4.1L18 8.5l-3.3 2.9.9 4.6-3.6-2.1-3.6 2.1.9-4.6L6 8.5l4.3-1.4L12 3z"></path>
+                <path d="M18.5 14.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9z"></path>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>AI 能力自由配置</h3>
+              <p>按账号接入 OpenAI 兼容上游（DeepSeek / Ollama 等），Key 只存本机，模型调用不经过第三方。</p>
+            </div>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9.5 14.5L4 20V4l5.5 5.5M14.5 9.5L20 4v16l-5.5-5.5"></path>
+                <circle cx="12" cy="12" r="2.4"></circle>
+              </svg>
+            </div>
+            <div class="feature-body">
+              <h3>专注专业与面试</h3>
+              <p>省下的时间全部投入专业能力提升与面试训练——这才是决定你能否拿到 offer 的关键。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 数据安全 / 信任区 ======== -->
+    <section class="section section-trust" id="trust">
+      <div class="container">
+        <div class="trust-panel">
+          <div class="trust-head">
+            <div class="trust-shield" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path>
+                <path d="M9 12l2 2 4-4"></path>
+              </svg>
+            </div>
+            <h2 class="section-title">AI 替你干活，但数据永远留在你手里</h2>
+            <p class="section-desc">CareerAgent 是本地优先的桌面应用，AI 自动化建立在「数据不出本机」的底线上，而不是把隐私交给云端。</p>
+          </div>
+
+          <div class="trust-grid">
+            <div class="trust-item">
+              <h3>本地优先</h3>
+              <p>本地服务器 + PGlite（PostgreSQL 兼容）数据库，简历、投递记录、公司档案全部存在你电脑的磁盘里。</p>
+            </div>
+            <div class="trust-item">
+              <h3>隐私默认</h3>
+              <p>无需注册账号，不上传云端。AI 的 Key、简历内容、聊天采集数据，都只留在你自己的电脑里。</p>
+            </div>
+            <div class="trust-item">
+              <h3>AI 只做杂活</h3>
+              <p>AI 的职责是替你自动化投递、调研、改简历这些无意义琐事，你保留对每一次结果的最终决定权。</p>
+            </div>
+            <div class="trust-item">
+              <h3>完全掌控</h3>
+              <p>数据就是普通文件，可备份、可迁移、可随时删除，没有任何东西被锁在别人的服务器上。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 下载区 ======== -->
+    <section class="section section-download" id="download">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-kicker">下载</p>
+          <h2 class="section-title">让 AI 开始替你干活</h2>
+          <p class="section-desc">支持 Windows 与 macOS，安装即用，无需注册。</p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-card">
+            <div class="download-os">
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true">
+                <path d="M3 5.5l8-1.5v7.5H3V5.5zM13 3.6l8 1.4v7H13V3.6zM3 12.6h8v7.5l-8-1.5v-6zM13 12.6h8v7.8l-8-1.4v-6.4z"/>
+              </svg>
+              <div>
+                <h3>Windows</h3>
+                <p class="download-format">NSIS 安装包 · .exe</p>
+              </div>
+            </div>
+            <ul class="download-specs">
+              <li>Windows 10 / 11（x64）</li>
+              <li>安装包体积约 100 MB</li>
+              <li>安装后数据默认保存在本机应用目录</li>
+            </ul>
+            <a
+              class="btn btn-primary btn-block"
+              href="https://github.com/shenge-work/career-agent/releases/latest"
+              data-download-platform="windows"
+              data-umami-event="download"
+              data-umami-event-platform="windows"
+            >
+              下载 Windows 版
+            </a>
+            <p class="download-note">或前往 <a href="https://github.com/shenge-work/career-agent/releases/latest" target="_blank" rel="noopener">GitHub Releases</a> 查看历史版本与校验值</p>
+          </article>
+
+          <article class="download-card">
+            <div class="download-os">
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true">
+                <path d="M16.7 12.9c0-2.2 1.8-3.2 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.7-.8-2.9-.8-1.5 0-2.8.9-3.6 2.2-1.5 2.7-.4 6.6 1.1 8.8.7 1.1 1.6 2.3 2.7 2.2 1.1 0 1.5-.7 2.8-.7 1.3 0 1.7.7 2.8.7 1.2 0 1.9-1.1 2.6-2.2.8-1.2 1.2-2.4 1.2-2.4s-2.4-.9-2.4-3.6zM14.9 6.2c.6-.7 1-1.7.9-2.7-.9 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.6 1 .1 2-.5 2.5-1.2z"/>
+              </svg>
+              <div>
+                <h3>macOS</h3>
+                <p class="download-format">磁盘映像 · .dmg</p>
+              </div>
+            </div>
+            <ul class="download-specs">
+              <li>macOS 12 及以上</li>
+              <li>Apple Silicon / Intel 通用</li>
+              <li>首次打开如提示，请在「系统设置 → 隐私与安全性」中允许</li>
+            </ul>
+            <a
+              class="btn btn-primary btn-block"
+              href="https://github.com/shenge-work/career-agent/releases/latest"
+              data-download-platform="macos"
+              data-umami-event="download"
+              data-umami-event-platform="macos"
+            >
+              下载 macOS 版
+            </a>
+            <p class="download-note">或前往 <a href="https://github.com/shenge-work/career-agent/releases/latest" target="_blank" rel="noopener">GitHub Releases</a> 查看历史版本与校验值</p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======== Footer ======== -->
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <a class="brand brand-inverse" href="#top">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+              <path d="M8 8h8M8 12h8M8 16h4"></path>
+            </svg>
+          </span>
+          <span class="brand-name">CareerAgent</span>
+        </a>
+        <p class="footer-tagline">让 AI 替你搞定求职杂活，你只专注专业与面试。</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>产品</h4>
+        <a href="#features">功能亮点</a>
+        <a href="#trust">数据安全</a>
+        <a href="#download">下载</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>项目</h4>
+        <a href="https://github.com/shenge-work/career-agent" target="_blank" rel="noopener">GitHub 仓库</a>
+        <a href="https://github.com/shenge-work/career-agent/releases/latest" target="_blank" rel="noopener">Release 说明</a>
+        <a href="https://github.com/shenge-work/career-agent/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <p>© <span id="footer-year">2025</span> CareerAgent · 让 AI 替你搞定求职杂活</p>
+      <p>依据 <a href="https://opensource.org/license/mit" target="_blank" rel="noopener">MIT License</a> 开源</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
