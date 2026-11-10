@@ -27,8 +27,20 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Package Windows
-        run: npm run desktop:pack:win
+        shell: bash
+        run: |
+          set +e
+          npm run desktop:pack:win > build-win.log 2>&1
+          RC=$?
+          {
+            echo "### Windows build log"
+            echo '```'
+            tail -n 140 build-win.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $RC
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: windows
           path: release/*.{exe,zip}
@@ -45,8 +57,20 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Package macOS
-        run: npm run desktop:pack:mac
+        shell: bash
+        run: |
+          set +e
+          npm run desktop:pack:mac > build-mac.log 2>&1
+          RC=$?
+          {
+            echo "### macOS build log"
+            echo '```'
+            tail -n 140 build-mac.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $RC
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: macos
           path: release/*.{exe,dmg,zip}
