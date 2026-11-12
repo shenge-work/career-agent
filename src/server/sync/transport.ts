@@ -43,7 +43,11 @@ export function nextSeq(value: string): string {
   return formatSeq(parseSeq(value) + 1n);
 }
 
-/** 云端只认这个随机 ID，不知道用户是谁；由恢复码派生，与登录账号体系解耦。 */
+/**
+ * 云端只认这个随机 ID，不知道用户是谁。
+ * I1 改造后 vaultId 由「恢复码 + 账号因子」派生（v2），因此它本身就是账号级
+ * 的不透明空间标识；存量 v1 vault 仍沿用旧 ID，由客户端在本地完成归属校验。
+ */
 export interface VaultRef {
   vaultId: string;
 }
@@ -62,6 +66,12 @@ export interface SyncEvent {
   row: Record<string, unknown> | null;
   /** 本事件引用的 blob objectKey，供对端按需懒加载。 */
   blobKeys: string[];
+  /**
+   * 账号隔离指纹（密文内，可选）：由 encKey + 账号因子 HMAC 派生。
+   * 回灌时若与本地指纹不符则拒绝落库，作为 AAD 校验之外的第二道防线。
+   * 存量升级前的事件没有此字段，按同 vault 历史数据放行。
+   */
+  scope?: string;
 }
 
 /**
@@ -78,6 +88,8 @@ export interface SyncAad {
   batchId: string;
   index: number;
   createdAt: string;
+  /** 账号隔离指纹（不透明 hex，可选）；存量事件无此字段。云端不解析、不存身份。 */
+  accountScope?: string;
 }
 
 /** 云端存储单元：除 AAD 外整个世界都是密文。 */

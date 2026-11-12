@@ -265,7 +265,7 @@ export default function Layout({
                   <span className="avatar lg">{initials(user.email)}</span>
                   <div className="account-id">
                     <div className="account-name">{user.email}</div>
-                    <div className="account-plan">{user.role === 'admin' ? '管理员' : '成员'}</div>
+                    <div className="account-plan">独立账号 · 数据仅本人可见</div>
                   </div>
                 </div>
                 <div className="account-sep" />
@@ -280,6 +280,18 @@ export default function Layout({
                     ⚙
                   </span>
                   账号与设置
+                </button>
+                <button
+                  className="account-item"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    logout();
+                  }}
+                >
+                  <span className="account-item-icon" aria-hidden>
+                    ⇄
+                  </span>
+                  切换 / 创建账号
                 </button>
                 <button
                   className="account-item"

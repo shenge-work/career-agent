@@ -55,16 +55,12 @@ beforeAll(async () => {
   closeDb = handle.close;
   await applyMigrations(handle.client);
 
-  for (const u of [
-    { ...ADMIN, role: 'admin' as const },
-    { ...USER_A, role: 'member' as const },
-    { ...USER_B, role: 'member' as const },
-    { ...USER_C, role: 'member' as const },
-  ]) {
+  // 账号一律平等：不再写入任何角色；users.role 物理列保留以兼容存量数据，
+  // 但建号默认值 'member' 不再被任何产品行为读取。ADMIN 只是历史命名，视为普通账号。
+  for (const u of [ADMIN, USER_A, USER_B, USER_C]) {
     await db.insert(users).values({
       email: u.email,
       passwordHash: await hashPassword(u.password),
-      role: u.role,
     });
   }
 
@@ -134,7 +130,10 @@ describe('P0 · 账号登录与会话', () => {
     const cookie = await login(ADMIN);
     const res = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    expect(res.json().user.role).toBe('admin');
+    expect(res.json().user.email).toBe(ADMIN.email);
+    // 去角色化：身份里不得再携带 role，也不得有等价的权限等级字段。
+    expect(res.json().user).not.toHaveProperty('role');
+    expect(res.json().user).not.toHaveProperty('isAdmin');
   });
 
   it('登出后会话立即失效', async () => {
@@ -220,70 +219,73 @@ describe('P0 · 行级数据隔离（核心）', () => {
   });
 });
 
-describe('P0 · 角色权限', () => {
-  it('member 访问管理员接口 403，admin 访问 200', async () => {
-    const memberCookie = await login(USER_A);
-    const adminCookie = await login(ADMIN);
+describe('P0 · 账号平权与无跨账号管理', () => {
+  it('任意账号行为一致，且不存在账号列表 / 停用他人账号的入口', async () => {
+    const cookies = [await login(ADMIN), await login(USER_A), await login(USER_B)];
+    const rows = await db.select().from(users).where(eq(users.email, USER_C.email)).limit(1);
 
-    const denied = await app.inject({
-      method: 'GET',
-      url: '/api/users',
-      headers: { cookie: memberCookie },
-    });
-    expect(denied.statusCode).toBe(403);
+    // 旧「管理员专属」接口已整体移除：账号列表与停用他人一律 404，
+    // 且对所有账号一视同仁（不再有 403 / 200 的角色差异）。
+    for (const cookie of cookies) {
+      const list = await app.inject({ method: 'GET', url: '/api/users', headers: { cookie } });
+      expect(list.statusCode).toBe(404);
 
-    const ok = await app.inject({
-      method: 'GET',
-      url: '/api/users',
-      headers: { cookie: adminCookie },
-    });
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json().length).toBeGreaterThanOrEqual(4);
-    expect(ok.json()[0]).not.toHaveProperty('passwordHash');
+      const disable = await app.inject({
+        method: 'POST',
+        url: `/api/users/${rows[0].id}/disable`,
+        headers: { cookie },
+      });
+      expect(disable.statusCode).toBe(404);
+
+      const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+      expect(me.statusCode).toBe(200);
+      expect(me.json().user).not.toHaveProperty('role');
+    }
   });
 
-  it('管理员可创建账号，且新账号能登录', async () => {
-    const adminCookie = await login(ADMIN);
+  it('自助创建账号：无需授权、无角色，新账号独立且可登录', async () => {
     const email = 'newbie@local.test';
+    // 不携带任何会话 cookie：本地自助建号，不依赖管理员。
     const created = await app.inject({
       method: 'POST',
       url: '/api/users',
-      headers: { 'content-type': 'application/json', cookie: adminCookie },
-      payload: { email, password: 'newbie-pass-123', role: 'member' },
+      headers: { 'content-type': 'application/json' },
+      payload: { email, password: 'newbie-pass-123' },
     });
     expect(created.statusCode).toBe(201);
     expect(created.json().email).toBe(email);
     expect(created.json()).not.toHaveProperty('passwordHash');
+    expect(created.json()).not.toHaveProperty('role');
 
     const cookie = await login({ email, password: 'newbie-pass-123' });
     expect(cookie).toContain('rs_sid=');
+
+    // 新账号与其他账号互不隶属：看不到别人的数据。
+    const otherId = await createResume(await login(USER_A), 'A 的私有简历');
+    const cross = await app.inject({
+      method: 'GET',
+      url: `/api/resumes/${otherId}`,
+      headers: { cookie },
+    });
+    expect(cross.statusCode).toBe(404);
   });
 
-  it('停用账号后其所有在线会话立即失效', async () => {
-    const adminCookie = await login(ADMIN);
+  it('停用他人账号能力已移除，任何账号的会话不受影响', async () => {
     const victimCookie = await login(USER_C);
-
-    const before = await app.inject({
-      method: 'GET',
-      url: '/api/auth/me',
-      headers: { cookie: victimCookie },
-    });
-    expect(before.statusCode).toBe(200);
-
     const rows = await db.select().from(users).where(eq(users.email, USER_C.email)).limit(1);
     const disabled = await app.inject({
       method: 'POST',
       url: `/api/users/${rows[0].id}/disable`,
-      headers: { cookie: adminCookie },
+      headers: { cookie: await login(ADMIN) },
     });
-    expect(disabled.statusCode).toBe(201);
+    expect(disabled.statusCode).toBe(404);
 
     const after = await app.inject({
       method: 'GET',
       url: '/api/auth/me',
       headers: { cookie: victimCookie },
     });
-    expect(after.statusCode).toBe(401);
+    expect(after.statusCode).toBe(200);
   });
 });
 
@@ -323,10 +325,30 @@ describe('P0 · 开发免登录（DEV_SKIP_AUTH，仅开发期）', () => {
       expect(cookie).toContain('rs_sid=');
       const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
       expect(me.statusCode).toBe(200);
-      expect(me.json().user.email).toBe(ADMIN.email);
+      // 账号一律平等，不再「优先选 admin」：只要落到库内任一有效账号即可。
+      const emails = (await db.select({ email: users.email }).from(users)).map((r) => r.email);
+      expect(emails).toContain(me.json().user.email);
+      expect(me.json().user).not.toHaveProperty('role');
     } finally {
       if (prev === undefined) delete process.env.DEV_SKIP_AUTH;
       else process.env.DEV_SKIP_AUTH = prev;
+    }
+  });
+
+  it('DEV_USER_EMAIL 指定账号时精确落到该账号', async () => {
+    const prevAuth = process.env.DEV_SKIP_AUTH;
+    const prevEmail = process.env.DEV_USER_EMAIL;
+    process.env.DEV_SKIP_AUTH = 'true';
+    process.env.DEV_USER_EMAIL = USER_B.email;
+    try {
+      const res = await app.inject({ method: 'POST', url: '/api/auth/dev-login' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().user.email).toBe(USER_B.email);
+    } finally {
+      if (prevAuth === undefined) delete process.env.DEV_SKIP_AUTH;
+      else process.env.DEV_SKIP_AUTH = prevAuth;
+      if (prevEmail === undefined) delete process.env.DEV_USER_EMAIL;
+      else process.env.DEV_USER_EMAIL = prevEmail;
     }
   });
 

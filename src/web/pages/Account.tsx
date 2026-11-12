@@ -1,34 +1,32 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, post, put, fmtTime, type SettingsResponse, type UserRow } from '../api';
+import { api, put, type SettingsResponse } from '../api';
 import type { CurrentUser } from '../../shared/constants';
 import { THEMES, switchTheme, themeFromSettings } from '../theme';
 import AiSettings from '../AiSettings';
 import UsagePanel from './Usage';
 
-type Section = 'account' | 'preferences' | 'members' | 'ai' | 'usage';
+// 账号一律平等：没有 members（成员管理）；usage 为远程新增的用量统计页。
+type Section = 'account' | 'preferences' | 'ai' | 'usage';
 
 const SECTIONS: { key: Section; label: string; icon: string }[] = [
   { key: 'account', label: '账户', icon: '👤' },
   { key: 'preferences', label: '偏好设置', icon: '⚙' },
-  { key: 'members', label: '成员管理', icon: '👥' },
   { key: 'ai', label: 'AI 模型', icon: '✦' },
   { key: 'usage', label: '用量统计', icon: '▥' },
 ];
 
+/**
+ * 账号与设置：只展示「当前账号自己」的信息与配置。
+ * 本产品没有管理员、没有成员管理，设置页刻意不提供任何跨账号视图或管理能力。
+ * 需要新增账号请到登录页「创建新账号」，或退出登录后从账号菜单切换。
+ */
 export default function Account({ user }: { user: CurrentUser }) {
   const qc = useQueryClient();
-  const isAdmin = user.role === 'admin';
   const [section, setSection] = useState<Section>('account');
-  const [form, setForm] = useState({ email: '', password: '', role: 'member' });
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api<UserRow[]>('/users'),
-    enabled: isAdmin,
-  });
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api<SettingsResponse>('/settings'),
@@ -39,25 +37,6 @@ export default function Account({ user }: { user: CurrentUser }) {
     if (settings) setJson(JSON.stringify(settings.payload ?? {}, null, 2));
   }, [settings]);
 
-  const onFail = (e: unknown) => setError((e as Error).message);
-
-  const createM = useMutation({
-    mutationFn: () => post<UserRow>('/users', form),
-    onSuccess: () => {
-      setForm({ email: '', password: '', role: 'member' });
-      setError('');
-      setNote('账号已创建');
-      qc.invalidateQueries({ queryKey: ['users'] });
-    },
-    onError: onFail,
-  });
-
-  const disableM = useMutation({
-    mutationFn: (id: string) => post(`/users/${id}/disable`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
-    onError: onFail,
-  });
-
   const settingsM = useMutation({
     mutationFn: (patch: Record<string, unknown>) => put<SettingsResponse>('/settings', patch),
     onSuccess: () => {
@@ -65,13 +44,8 @@ export default function Account({ user }: { user: CurrentUser }) {
       setNote('设置已保存');
       qc.invalidateQueries({ queryKey: ['settings'] });
     },
-    onError: onFail,
+    onError: (e: unknown) => setError((e as Error).message),
   });
-
-  function create(e: FormEvent) {
-    e.preventDefault();
-    if (form.email.trim() && form.password) createM.mutate();
-  }
 
   function saveSettings() {
     try {
@@ -87,7 +61,7 @@ export default function Account({ user }: { user: CurrentUser }) {
     <>
       <div className="page-head">
         <h1>账号与设置</h1>
-        <p className="muted small">管理你的账户身份、偏好与应用配置。</p>
+        <p className="muted small">管理你的账户身份、偏好与应用配置。每个账号的数据与云端同步空间都完全独立。</p>
       </div>
       {error && <div className="alert">{error}</div>}
       {note && <div className="hint">{note}</div>}
@@ -95,7 +69,7 @@ export default function Account({ user }: { user: CurrentUser }) {
       <div className="settings-layout">
         {/* 左侧二级导航 */}
         <nav className="settings-nav" aria-label="设置导航">
-          {SECTIONS.filter((s) => s.key !== 'members' || isAdmin).map((s) => (
+          {SECTIONS.map((s) => (
             <button
               key={s.key}
               className={'settings-nav-item' + (section === s.key ? ' active' : '')}
@@ -117,18 +91,22 @@ export default function Account({ user }: { user: CurrentUser }) {
               <div className="account-profile">
                 <span className="avatar lg">{user.email.trim().charAt(0).toUpperCase()}</span>
                 <div className="account-id">
-                  <div className="account-name">{user.email}</div>
-                  <div className="account-plan">{user.role === 'admin' ? '管理员' : '成员'}</div>
+                  <div className="account-name">{user.displayName || user.email}</div>
+                  <div className="account-plan">独立账号 · 数据仅本人可见</div>
                 </div>
               </div>
               <div className="kv">
                 <span>邮箱</span>
                 <span>{user.email}</span>
-                <span>角色</span>
-                <span>{user.role === 'admin' ? '管理员' : '成员'}</span>
+                <span>显示名</span>
+                <span>{user.displayName || '—'}</span>
                 <span>账号 ID</span>
                 <span className="mono">{user.id}</span>
               </div>
+              <p className="muted small" style={{ marginTop: 12 }}>
+                需要另一个独立的数据空间？退出登录后可在登录页「创建新账号」，
+                账号之间互不隶属、数据互不可见、云端同步也各自隔离。
+              </p>
             </section>
           )}
 
@@ -178,46 +156,6 @@ export default function Account({ user }: { user: CurrentUser }) {
                 </div>
               </section>
             </>
-          )}
-
-          {section === 'members' && isAdmin && (
-            <section className="panel">
-              <h2>成员管理</h2>
-              <p className="muted small">内测账号由管理员统一创建。</p>
-              <form className="form-grid" onSubmit={create}>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="邮箱" />
-                <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="密码（至少 8 位）" />
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="member">成员</option>
-                  <option value="admin">管理员</option>
-                </select>
-                <button type="submit" disabled={createM.isPending || !form.email.trim() || !form.password}>
-                  创建账号
-                </button>
-              </form>
-              <ul className="list">
-                {users.map((u) => (
-                  <li key={u.id}>
-                    <span className="dot" />
-                    <div className="li-main">
-                      <div className="title">
-                        {u.email}
-                        <span className="tag">{u.role === 'admin' ? '管理员' : '成员'}</span>
-                        {u.status === 'disabled' && <span className="tag">已停用</span>}
-                      </div>
-                      <div className="muted small">
-                        {u.displayName || '—'} · 创建 {fmtTime(u.createdAt)} · 最近登录 {fmtTime(u.lastLoginAt)}
-                      </div>
-                      {u.id !== user.id && u.status === 'active' && (
-                        <div className="btn-row">
-                          <button className="mini danger" onClick={() => disableM.mutate(u.id)}>停用</button>
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
           )}
 
           {section === 'ai' && <AiSettings />}

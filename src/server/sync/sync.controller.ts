@@ -36,7 +36,8 @@ import { SyncCloudService } from './sync-cloud.service';
  *   POST /api/sync/run      手动触发一轮 push/pull/GC
  *   POST /api/sync/disable  停用（本地数据保留）
  *
- * 全部经 SessionGuard；跨用户数据一律 404。
+ * 全部经 SessionGuard；账号一律平等，跨用户数据一律 404。
+ * 云同步的云端空间按账号隔离：不同账号即使填完全相同的恢复码也落到不同空间。
  */
 @Controller('api/sync')
 @UseGuards(SessionGuard, RolesGuard)
@@ -118,7 +119,7 @@ export class SyncController {
       throw new BadRequestException('请输入恢复码（8 组 × 8 位十六进制）');
     }
     try {
-      return await this.cloud.enable(user.id, recoveryCode);
+      return await this.cloud.enable(user.id, recoveryCode, user.email);
     } catch (err: any) {
       if (err?.status === 409) throw new ConflictException(err.message);
       if (err?.message?.includes('恢复码必须是')) throw new BadRequestException(err.message);
@@ -131,7 +132,7 @@ export class SyncController {
   @HttpCode(200)
   async run(@CurrentUser() user: CurrentUserType) {
     try {
-      return await this.cloud.run(user.id);
+      return await this.cloud.run(user.id, user.email);
     } catch (err: any) {
       if (err?.status === 404) throw new NotFoundException(err.message);
       if (err?.status === 409) throw new ConflictException(err.message);

@@ -210,20 +210,39 @@ export class SyncEngine {
     }
   }
 
+  /** 只读 AAD（不解密），判断封包是否属于当前账号。解析失败一律按「不匹配」处理。 */
+  private envelopeScopeMatches(envelope: SyncEnvelope): boolean {
+    if (!this.keys.accountScope) return true;
+    try {
+      const aad = JSON.parse(envelope.aad) as { accountScope?: string };
+      // 存量升级前的事件没有指纹：同一 vault 内视为本账号历史数据，保持可读。
+      return !aad.accountScope || aad.accountScope === this.keys.accountScope;
+    } catch {
+      return false;
+    }
+  }
+
   /** 拉取并回灌；每批落一次游标，中断只重放最后一小段。 */
   private async pullPhase(userId: string, stats: SyncStats): Promise<void> {
     for (let round = 0; round < MAX_PULL_ROUNDS; round += 1) {
       const result = await this.transport.pull(stats.pulledSeq, PULL_BATCH);
       for (const envelope of result.envelopes) {
         stats.pulled += 1;
-        // 本机自己推的事件不再回灌（push 成功后游标通常已越过，这里是兜底）
-        if (envelope.deviceId === this.deviceId) {
+        // 本机自己推的事件不再回灌（push 成功后游标通常已越过，这里是兜底）。
+        // deviceId 是机器级的，同机多账号会共享；只有 AAD 的账号隔离指纹也匹配时
+        // 才认定是「本账号这台设备」推的，否则继续走 openEvent（密钥不同必然解封
+        // 失败，绝不会把别账号的数据落库，也不会误跳过本账号该拉的事件）。
+        if (envelope.deviceId === this.deviceId && this.envelopeScopeMatches(envelope)) {
           stats.skipped += 1;
           continue;
         }
         let outcome: 'applied' | 'rejected' | 'skipped';
         try {
           const { event } = openEvent(this.keys, envelope);
+          // 第二道防线：密文内的账号指纹与本地不符，拒绝回灌。
+          if (this.keys.accountScope && event.scope && event.scope !== this.keys.accountScope) {
+            throw new Error('事件账号隔离指纹不匹配：拒绝跨账号回灌');
+          }
           if (event.rowHlc) {
             this.seenRemote.set(`${event.entity}:${event.entityId}`, String(event.rowHlc));
           }
@@ -338,6 +357,8 @@ export class SyncEngine {
       deviceId: String(row.deviceId || ''),
       row,
       blobKeys,
+      // 账号隔离指纹进密文：对端回灌时校验，杜绝跨账号数据串库。
+      ...(this.keys.accountScope ? { scope: this.keys.accountScope } : {}),
     };
   }
 
@@ -423,7 +444,9 @@ export class SyncEngine {
     }
     if (!SYNCED_TABLES[event.entity] || !event.row) return 'skipped';
     const row = reviveRow(event.row);
-    row.userId = userId; // 防御：云端事件是同 vault 的，但行归属以本地账号为准
+    // 跨设备时 user_id 是各设备本地生成的 UUID，必须改写成本地账号归属。
+    // 安全性由上文两道账号指纹校验保证：能走到这里的事件一定属于当前账号。
+    row.userId = userId;
     const result = await applyRemoteUpsert(this.db, {
       entity: event.entity as 'resumes',
       row,

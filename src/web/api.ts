@@ -235,14 +235,11 @@ export const restoreConflict = (id: string) =>
 export const dismissConflict = (id: string) =>
   del<{ ok: true; status: 'dismissed' }>(`/sync/conflicts/${encodeURIComponent(id)}`);
 
-export interface UserRow {
+/** 自助建号响应：只回显新账号自身字段，不含任何角色或他人账号信息。 */
+export interface CreatedUser {
   id: string;
   email: string;
   displayName: string | null;
-  role: 'admin' | 'member';
-  status: 'active' | 'disabled';
-  createdAt: string;
-  lastLoginAt: string | null;
 }
 
 export interface SettingsResponse {

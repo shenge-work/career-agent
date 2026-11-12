@@ -53,11 +53,11 @@ describe('桌面端 · 首次运行初始化', () => {
     expect(status.json().needsSetup).toBe(true);
   });
 
-  it('创建首个管理员账号后可用它登录', async () => {
+  it('创建首个账号（无角色）后可用它登录', async () => {
     const res = await post('/api/setup/bootstrap', { ...ACCOUNT, displayName: '机主' });
     expect(res.statusCode).toBe(201);
-    expect(res.json().user.role).toBe('admin');
     expect(res.json().user.email).toBe(ACCOUNT.email);
+    expect(res.json().user).not.toHaveProperty('role');
     expect(JSON.stringify(res.json())).not.toContain('passwordHash');
 
     const login = await post('/api/auth/login', ACCOUNT);
@@ -65,13 +65,23 @@ describe('桌面端 · 首次运行初始化', () => {
     expect(String(login.headers['set-cookie'])).toContain('rs_sid');
   });
 
-  it('已有账号后初始化入口永久关闭', async () => {
+  it('已有账号后仍可自助创建独立账号，重复邮箱则拒绝', async () => {
     const status = await app.inject({ method: 'GET', url: '/api/setup/status' });
     expect(status.json()).toEqual({ needsSetup: false });
-    const again = await post('/api/setup/bootstrap', {
-      email: 'attacker@local.test',
-      password: 'attacker-pass-123',
+
+    const second = await post('/api/setup/bootstrap', {
+      email: 'second@local.test',
+      password: 'second-pass-123',
     });
-    expect(again.statusCode).toBe(409);
+    expect(second.statusCode).toBe(201);
+    expect(second.json().user).not.toHaveProperty('role');
+    const login2 = await post('/api/auth/login', {
+      email: 'second@local.test',
+      password: 'second-pass-123',
+    });
+    expect(login2.statusCode).toBe(200);
+
+    const duplicate = await post('/api/setup/bootstrap', { ...ACCOUNT });
+    expect(duplicate.statusCode).toBe(409);
   });
 });

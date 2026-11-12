@@ -6,6 +6,8 @@
 技术上以**岗位（Application）为第一公民**，承载简历编辑（A4 实时预览 / 矢量与图片版 PDF）、
 公司档案（求职情报底座）、投递追踪（含 BOSS 聊天采集）、AI 模型转发与本地版本历史；
 账号登录 + 行级数据隔离 + PostgreSQL 兼容数据库。数据全部在本机，不出你的电脑。
+账号一律平等：**没有管理员、没有成员管理**，每个账号的本地数据与云端同步空间都完全独立、互不干扰；
+可选的跨设备同步仍是端到端加密的哑云，云端只见密文、断云仍可用。
 
 > 本项目由「零后端单文件简历编辑器（v1）」重构而来：v1 已于 2026-11-04 退役，
 > 其渲染引擎资产收编至 `legacy/` 继续服役（预览与 PDF 同源）。重构全过程见
@@ -33,7 +35,7 @@ CareerAgent 的立场很明确：
 ```bash
 npm install                 # 首次
 npm run db:migrate          # 应用 drizzle/*.sql（PGlite 数据落 ./pgdata）
-npm run seed:user -- --email me@local.test --password '<强密码>' --role admin
+npm run seed:user -- --email me@local.test --password '<强密码>'
 npm run dev                 # 前端 5173 / API 3000
 ```
 
@@ -62,14 +64,17 @@ npm run desktop:pack:win:dir # Windows 免安装绿色版 → release/win-unpack
 npm run desktop:pack:mac     # macOS dmg + zip（需在 macOS 上执行）
 ```
 
-首次启动会自动打开建号向导（库里没有任何账号时）；数据写在
+首次启动会自动打开建号向导（库里没有任何账号时），创建的是**普通独立账号**，不是管理员；
+之后仍可在登录页「创建新账号」持续创建互相独立的账号，无需任何授权。数据写在
 Windows `%APPDATA%\CareerAgent\data` / macOS `~/Library/Application Support/CareerAgent/data`，
 与安装目录分离。
 
 ## ✨ 当前功能
 
-**账号与数据**：多账号登录（Argon2id + HttpOnly 会话）、全部业务数据按账号行级隔离
-（跨用户资源一律 404）；PGlite（PostgreSQL WASM）存储，数据目录 `./pgdata`，可平替切换真 PostgreSQL。
+**账号与数据**：多账号登录（Argon2id + HttpOnly 会话）、**账号一律平等**（无角色 / 管理员 /
+成员管理，设置页只展示本人信息）、全部业务数据按账号行级隔离（跨用户资源一律 404）；
+云同步空间按账号派生密钥，不同账号即使填同一恢复码也互不干扰，云端仍只见密文；
+PGlite（PostgreSQL WASM）存储，数据目录 `./pgdata`，可平替切换真 PostgreSQL。
 
 **简历**：多简历库（母简历 / JD 派生版 / 空白模板）、设主简历；双栏编辑器——左侧 v1
 渲染管线（vm 沙箱）输出的 A4 实时预览，右侧结构感知表单 + 原始 JSON 兜底，停 800ms 自动保存；
@@ -122,7 +127,7 @@ GET 永不回显；流式试用台；按账号统计用量。
 ```
 
 - `src/server/` NestJS：auth（认证）/ tenant（行级隔离唯一入口）/ resumes / business /
-  referral（内推）/ render（渲染孤岛与双 PDF）/ ai / collect / users / security（回环守卫）
+  referral（内推）/ render（渲染孤岛与双 PDF）/ ai / collect / users（自助建号）/ security（回环守卫）
 - `src/web/` React（HashRouter **22 条业务路由**）：总览 / 岗位列表与详情 / 简历库与编辑器 / 作品集 / 经历素材 / 公司档案与对比 / 内推 / 投递追踪 / 附件库 / 云同步 / 冲突恢复 / AI 试用台 / AI 面试练习三页 / 面经库 / 账号与设置。侧栏为「工作区 / 智能工具」两组，宽文字侧栏（默认）与窄图标栏可切换，图标均带 `aria-label`
 - `legacy/` v1 渲染引擎资产（8 个 JS + style.css + html2canvas/jspdf + boss-collect），
   只读引用、只改 bug 不重构

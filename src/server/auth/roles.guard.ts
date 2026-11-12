@@ -1,29 +1,16 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { ROLES_KEY, type Role } from '../../shared/constants';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 
-/** 必须在 SessionGuard 之后执行（依赖 req.currentUser）。 */
+/**
+ * 兼容占位守卫（恒放行）。
+ *
+ * 账号体系去角色化后，鉴权只由 SessionGuard 负责：登录即可访问自己的全部数据，
+ * 不存在任何基于角色/管理员的权限分支。保留类名与注入点，是为了让既有控制器的
+ * `@UseGuards(SessionGuard, RolesGuard)` 无需逐个改动，同时保证「任何产品行为
+ * 都不再读取或依赖角色取值」。请勿在此重新加入权限判断。
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
-
-  canActivate(ctx: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
-      ctx.getHandler(),
-      ctx.getClass(),
-    ]);
-    if (!required || required.length === 0) return true;
-    const req = ctx.switchToHttp().getRequest();
-    const user = req.currentUser;
-    if (!user) throw new UnauthorizedException('未登录');
-    if (!required.includes(user.role)) throw new ForbiddenException('权限不足');
+  canActivate(_ctx: ExecutionContext): boolean {
     return true;
   }
 }

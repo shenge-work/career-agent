@@ -30,7 +30,7 @@ function write(rel: string, value: unknown): void {
 
 async function insertUser(email: string): Promise<string> {
   const res = await handle.client.query(
-    "INSERT INTO users (email, password_hash, role) VALUES ($1, '$argon2$test-only', 'admin') RETURNING id",
+    "INSERT INTO users (email, password_hash, role) VALUES ($1, '$argon2$test-only', 'member') RETURNING id",
     [email]
   );
   return String(res.rows[0].id);

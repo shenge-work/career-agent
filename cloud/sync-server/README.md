@@ -88,7 +88,9 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 BASE_URL=https://106.55.30.22:8443 npm run smoke
 new RemoteSyncTransport({ baseUrl: 'https://106.55.30.22:8443', keys, deviceId, insecureTls: true });
 ```
 
-启用同步时本地生成一次性恢复码，另一台设备输入同一恢复码加入同一 vault，密钥绝不落云端。
+启用同步时本地生成一次性恢复码。同步空间由「恢复码 + 账号」共同派生：另一台设备需**先登录同一账号**
+再输入同一恢复码接入；不同账号即使填完全相同的恢复码，也落到不同 vault、用不同密钥，互不干扰。
+云端仍只见密文与不透明空间标识，密钥绝不落云端。
 后续若有正规域名 + 受信证书，去掉 `insecureTls` 即可。
 
 ## 安全边界
@@ -96,3 +98,5 @@ new RemoteSyncTransport({ baseUrl: 'https://106.55.30.22:8443', keys, deviceId, 
 - 云端只存 `sha256(authKey)`、事件密文（aad 是明文路由信息，ciphertext 永不解密）、blob 密文。
 - 授权头 `X-CA-Auth` 是 authKey 的 hex，云端只存其哈希；比对用常量时间比较。
 - 恢复码与派生密钥绝不落库、绝不出本机；改登录密码不影响同步密钥。
+- AAD 里的 `accountScope` 是账号级不透明 hex（HMAC 派生），云端无法反推身份；客户端用它
+  在解封与回灌两处拒绝跨账号重放。存量升级前的事件没有该字段，按同 vault 历史数据放行。

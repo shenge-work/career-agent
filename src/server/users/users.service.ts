@@ -1,46 +1,25 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DB_TOKEN, ROLES, type Role } from '../../shared/constants';
-import { SessionsService } from '../auth/sessions.service';
+import { DB_TOKEN } from '../../shared/constants';
 import { hashPassword } from '../auth/password';
 import type { Database } from '../db/client';
 import { users } from '../db/schema';
 
+/**
+ * 账号服务：只负责「创建一个独立账号」。
+ *
+ * 去角色化后不再有 list()（跨账号视图）与 disable()（停用他人账号）——
+ * 这两者是旧「成员管理」模型的核心能力，已随管理员概念一并移除。
+ * users.role 物理列保留以兼容存量数据，但本服务从不读写它。
+ */
 @Injectable()
 export class UsersService {
-  constructor(
-    @Inject(DB_TOKEN) private readonly db: Database,
-    @Inject(SessionsService) private readonly sessions: SessionsService
-  ) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Database) {}
 
-  /** 永不返回 password_hash。 */
-  list() {
-    return this.db
-      .select({
-        id: users.id,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        status: users.status,
-        createdAt: users.createdAt,
-        lastLoginAt: users.lastLoginAt,
-      })
-      .from(users)
-      .orderBy(users.createdAt);
-  }
-
-  async create(input: { email: string; password: string; role?: Role; displayName?: string | null }) {
+  async create(input: { email: string; password: string; displayName?: string | null }) {
     const email = input.email.trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new BadRequestException('邮箱格式不正确');
     if (input.password.length < 8) throw new BadRequestException('密码至少 8 位');
-    const role = input.role || 'member';
-    if (!ROLES.includes(role)) throw new BadRequestException('role 只能是 admin 或 member');
 
     const existing = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
     if (existing.length) throw new ConflictException('该邮箱已存在');
@@ -48,25 +27,17 @@ export class UsersService {
     const passwordHash = await hashPassword(input.password);
     const [row] = await this.db
       .insert(users)
-      .values({ email, passwordHash, role, displayName: input.displayName || null })
+      .values({
+        email,
+        passwordHash,
+        displayName: input.displayName || null,
+        status: 'active',
+      })
       .returning({
         id: users.id,
         email: users.email,
         displayName: users.displayName,
-        role: users.role,
-        status: users.status,
       });
     return row;
-  }
-
-  async disable(id: string) {
-    const rows = await this.db
-      .update(users)
-      .set({ status: 'disabled' })
-      .where(eq(users.id, id))
-      .returning({ id: users.id });
-    if (!rows.length) throw new NotFoundException('账号不存在');
-    await this.sessions.revokeAllForUser(id);
-    return { ok: true };
   }
 }

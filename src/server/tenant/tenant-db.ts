@@ -328,7 +328,7 @@ export type SnippetPatch = Partial<
  * 设计铁律：这个对象里**没有任何**不带 userId 的查询方法。
  * controller 拿到的只能是 forUser(currentUser.id) 的返回值，
  * 因此「忘了加 where user_id」在结构上就不可能发生。
- * 需要跨用户视图时（管理员），必须走单独的 UsersService 并经 RolesGuard('admin')。
+ * 账号一律平等：不存在任何跨用户视图，也没有管理员角色；UsersService 只提供自助建号。
  *
  * 0011 起，9 张可变实体表一律：读走 active()（自动过滤软删除墓碑）、
  * 删走 softDelete()（UPDATE 设 deleted_at）、创建走 revive()（支持同 id 复活）。

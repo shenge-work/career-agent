@@ -15,11 +15,12 @@ import {
  * 云同步（#/sync）：哑云 + E2EE + local-first。
  *
  * 本页三件事：
- *   1. 启用 —— 输入/生成恢复码；第一台设备创建 vault，另一台设备加入同一个 vault；
+ *   1. 启用 —— 输入/生成恢复码；为当前账号创建或接入账号级同步空间（按账号隔离）；
  *   2. 状态与手动同步 —— 游标、最近结果、立即推拉一轮；
  *   3. 停用 —— 只清配置，本地数据全部保留（断云不降级）。
  *
- * 恢复码只显示一次（服务端只存派生密钥，无法找回）；另一台设备加入全靠手抄。
+ * 恢复码只显示一次（服务端只存派生密钥，无法找回）；另一台设备需先登录同一账号，
+ * 再手抄这串码接入。不同账号即使使用相同恢复码也落到不同空间、用不同密钥。
  */
 
 /** 8 组 × 8 位 hex：与 crypto.generateRecoveryCode 同格式，客户端本地生成。 */
@@ -128,8 +129,9 @@ export default function Sync() {
       <div className="page-head">
         <h1>云同步</h1>
         <p className="muted small">
+          这是<strong>当前账号</strong>的跨设备同步空间：每个账号的云端数据相互独立、互不干扰。
           本地永远完整可用，云端只是可选的备份与跨设备通道（断网不降级）。
-          端到端加密：云端只见密文，密钥由恢复码派生、永不离开本机。
+          端到端加密：云端只见密文与不透明空间标识，密钥由恢复码与账号共同派生、永不离开本机。
         </p>
       </div>
 
@@ -143,8 +145,9 @@ export default function Sync() {
         <section className="panel">
           <h2>启用同步</h2>
           <p className="muted small">
-            第一台设备：点「随机生成」产生一个新恢复码（创建保险库）。
-            另一台设备：粘贴第一台设备显示的恢复码（加入同一保险库）。
+            第一台设备：点「随机生成」产生一个新恢复码，为<strong>当前账号</strong>创建同步空间。
+            另一台设备：先<strong>登录同一个账号</strong>，再粘贴第一台设备显示的恢复码接入。
+            不同账号即使填了完全相同的恢复码，也会进入各自独立的空间，不会合并、不会串数据。
             恢复码 = 64 位十六进制（8 组 × 8 位），只在启用时显示一次，请务必抄写保存。
           </p>
           <div className="btn-row">
@@ -179,7 +182,8 @@ export default function Sync() {
             <section className="panel" style={{ border: '1px solid #000' }}>
               <h2>恢复码（仅显示这一次）</h2>
               <p className="muted small">
-                另一台设备加入全靠这串码。服务端只存派生密钥，<strong>关闭页面后无法再次查看</strong>，
+                另一台设备<strong>登录同一账号</strong>后靠这串码接入本账号的空间。
+                服务端只存派生密钥，<strong>关闭页面后无法再次查看</strong>，
                 请立即抄写或复制到密码管理器。
               </p>
               <div className="btn-row">
@@ -242,7 +246,7 @@ export default function Sync() {
                 服务器 <span className="mono">{status.baseUrl}</span>
               </div>
               <div>
-                保险库 <span className="mono">{status.vaultId?.slice(0, 16)}…</span>
+                本账号同步空间 <span className="mono">{status.vaultId?.slice(0, 16)}…</span>
               </div>
               <div>
                 本机设备 <span className="mono">{status.deviceId?.slice(0, 8)}…</span>
@@ -270,6 +274,7 @@ export default function Sync() {
             <p className="muted small" style={{ marginTop: 10 }}>
               两台设备同时编辑同一条记录时，按 HLC 做 last-write-wins，落败方的整行原文会留进
               <a href="#/conflicts"> 冲突恢复</a>，可随时人工恢复。停用只清配置，本地数据与已下载附件全部保留。
+              每个账号的同步空间、密钥与进度彼此独立，多台设备共用同一云端服务也不会互相干扰。
             </p>
           </section>
         </>

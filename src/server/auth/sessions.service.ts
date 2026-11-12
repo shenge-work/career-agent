@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, gt, isNull } from 'drizzle-orm';
-import { DB_TOKEN, SESSION_TTL_HOURS, type CurrentUser, type Role } from '../../shared/constants';
+import { DB_TOKEN, SESSION_TTL_HOURS, type CurrentUser } from '../../shared/constants';
 import type { Database } from '../db/client';
 import { sessions, users } from '../db/schema';
 
@@ -24,14 +24,13 @@ export class SessionsService {
     });
   }
 
-  /** 一次性校验 token 有效性 + 账号仍启用，并把用户身份带出来。 */
+  /** 一次性校验 token 有效性 + 账号仍启用，并把用户身份带出来（不含任何角色信息）。 */
   async resolveUser(tokenHash: string): Promise<CurrentUser | null> {
     const rows = await this.db
       .select({
         id: users.id,
         email: users.email,
         displayName: users.displayName,
-        role: users.role,
       })
       .from(sessions)
       .innerJoin(users, eq(sessions.userId, users.id))
@@ -50,7 +49,6 @@ export class SessionsService {
       id: r.id,
       email: r.email,
       displayName: r.displayName,
-      role: r.role as Role,
     };
   }
 
@@ -61,7 +59,7 @@ export class SessionsService {
       .where(eq(sessions.tokenHash, tokenHash));
   }
 
-  /** 停用账号 / 改密码时，把该用户所有在线会话一次性踢掉。 */
+  /** 改密码/重置凭据时，把该用户所有在线会话一次性踢掉。 */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.db
       .update(sessions)
