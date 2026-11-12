@@ -558,7 +558,11 @@ export default function CompanyDetailPage() {
                 <strong>{j.payload?.title || '未命名岗位'}</strong>
                 <span className="muted small">
                   {' '}· {j.payload?.salary || '—'} · {j.payload?.city || '—'}
-                  {j.payload?.publishDate ? ` · 发布于 ${j.payload.publishDate}` : ''}
+                  {j.payload?.publishDate
+                    ? ` · 发布于 ${j.payload.publishDate}`
+                    : j.payload?.updatedDate
+                      ? ` · 更新于 ${j.payload.updatedDate}`
+                      : ''}
                 </span>
                 <div className="btn-row">
                   <button className="mini danger" onClick={() => deleteJdM.mutate(j.id)}>删除</button>

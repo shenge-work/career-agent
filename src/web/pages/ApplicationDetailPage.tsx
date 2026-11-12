@@ -239,8 +239,10 @@ export default function ApplicationDetailPage() {
 
   const salary = (app.payload?.salary as string) || '';
   const location = (app.payload?.location as string) || '';
-  // 岗位发布时间：招聘页上抓到的原始发布日期（xTool 内推页不展示，故可能为空）。
+  // 岗位发布时间：招聘页上抓到的原始发布日期（xTool / 快手内推页不展示发布时间，故可能为空，
+  // 此时退化成「更新于」，与招聘页展示的口径一致，不编造发布日期）。
   const publishDate = (app.payload?.publishDate as string) || '';
+  const updatedDate = (app.payload?.updatedDate as string) || '';
 
   return (
     <div className="detail-page">
@@ -269,7 +271,11 @@ export default function ApplicationDetailPage() {
           {company && <span className="meta-chip">{company.name}</span>}
           {salary && <span className="meta-chip salary">{salary}</span>}
           {location && <span className="meta-chip">{location}</span>}
-          {publishDate && <span className="meta-chip">发布于 {publishDate}</span>}
+          {publishDate ? (
+            <span className="meta-chip">发布于 {publishDate}</span>
+          ) : (
+            updatedDate && <span className="meta-chip">更新于 {updatedDate}</span>
+          )}
         </div>
         <div className="detail-meta-grid">
           <div>
