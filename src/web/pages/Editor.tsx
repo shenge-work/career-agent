@@ -675,6 +675,9 @@ export default function Editor() {
   // P0-4：A4 预览自适应宽度（默认「适应宽度」，可按需切「实际大小」）。
   const [fitMode, setFitMode] = useState<'fit' | 'full'>('fit');
   const [previewScale, setPreviewScale] = useState(1);
+  // 预览内容高度（px，未缩放）：预览 HTML 是连续长条，多页时高度 = 内容自然高度。
+  // 默认单页 A4（1123px），iframe onLoad 时读取真实内容高度后自适应。
+  const [previewHeight, setPreviewHeight] = useState(1123);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const loadedIdRef = useRef<string | null>(null);
   const baselineRef = useRef<string>('');
@@ -797,6 +800,24 @@ export default function Editor() {
   const dataPrefix: Path = draft?.data && typeof draft.data === 'object' ? ['data'] : [];
 
   const previewUrl = `/api/resumes/${encodeURIComponent(id)}/preview?v=${previewKey}`;
+
+  // 预览 iframe 加载完成后，读取其内部真实内容高度（多页简历不再被裁成单页）。
+  // 同源 iframe，可直接访问 contentDocument；读取 body 与 .resume 的较大值作高度基准。
+  function syncPreviewHeight() {
+    const frame = iframeRef.current;
+    if (!frame) return;
+    try {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const bodyH = doc.body ? doc.body.scrollHeight : 0;
+      const resumeEl = doc.querySelector('.resume');
+      const resumeH = resumeEl ? (resumeEl as HTMLElement).scrollHeight : 0;
+      const h = Math.max(bodyH, resumeH, 1123); // 至少一页，避免空内容塌缩
+      if (h > 0) setPreviewHeight(h);
+    } catch {
+      // 跨源或渲染异常时保持默认单页高度，不打断编辑
+    }
+  }
 
   // P0-4：依据预览区可用宽度计算缩放比，让 794px 的 A4 内容完整可见（不再被裁掉约 20%）。
   // 依赖 draft：预览 DOM 只在简历加载完成后才渲染，挂载时 ref 尚为空，须在加载完成后再挂 ResizeObserver。
@@ -1008,6 +1029,9 @@ export default function Editor() {
         <section className="preview-pane">
           <div className="pane-cap">
             <span>简历预览（A4）</span>
+            <span className={'page-badge'} title="按当前内容高度估算的页数">
+              {Math.max(1, Math.ceil(previewHeight / 1123))} 页
+            </span>
             <span className="spacer" />
             <div className="seg">
               <button
@@ -1028,7 +1052,7 @@ export default function Editor() {
           <div className="preview-fit-scroll" ref={previewScrollRef}>
             <div
               className="preview-fit"
-              style={{ width: 794 * previewScale, height: 1123 * previewScale }}
+              style={{ width: 794 * previewScale, height: previewHeight * previewScale }}
             >
               <iframe
                 ref={iframeRef}
@@ -1036,12 +1060,13 @@ export default function Editor() {
                 className="preview-frame"
                 title="简历预览"
                 src={previewUrl}
+                onLoad={syncPreviewHeight}
                 style={{
                   position: 'absolute',
                   top: 0,
                   left: 0,
                   width: 794,
-                  height: 1123,
+                  height: previewHeight,
                   transform: `scale(${previewScale})`,
                   transformOrigin: 'top left',
                 }}
