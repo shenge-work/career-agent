@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fmtTime, getAiUsage, type AiUsageStats } from '../api';
+import { actionLabel } from '../../shared/ai';
 
 /**
  * 用量统计面板（嵌入「账号与设置 → 用量统计」section）：账号级 AI 调用对账。
  *
  * 数据源是 append-only 的 ai_usage_events 明细（每次调用一行），因此 token 精确累加、
- * 可逐厂商 / 逐模型对账。范围 7 天 / 30 天 / 全部。
+ * 可逐厂商 / 逐模型 / 逐用途对账。范围 7 天 / 30 天 / 全部。
  *
- * 本面板展示三层：
+ * 本面板展示：
  *   1. 全局概览 —— 请求 / 失败率 / tokens / 平均耗时；
  *   2. 厂商对账 —— 每个厂商的请求、失败、token、平均耗时、最近调用；
- *   3. 模型对账 —— 每个模型同上（附所属厂商）。
- * 底部是按日趋势（从明细实时聚合）。
+ *   3. 模型对账 —— 每个模型同上（附所属厂商）；
+ *   4. 用途对账 —— 按 action（JD 解析 / 投递话术 / 面试复盘 / 面经问答等）；
+ *   5. 错误码对账 —— 失败调用的错误码分布（仅在有失败时展示）。
+ * 底部是按日趋势（从明细实时聚合）+ 导出 CSV 对账数据。
  */
 
 const RANGES = [
@@ -136,6 +139,119 @@ function DailyTrend({ days }: { days: AiUsageStats['days'] }) {
   );
 }
 
+/** 按用途对账表（action：JD 解析 / 投递话术 / 面试复盘 / 面经问答 / 连接测试 / 试用台）。 */
+function ActionTable({ actions, totalTokens }: { actions: AiUsageStats['actions']; totalTokens: number }) {
+  if (actions.length === 0) return null;
+  return (
+    <section className="panel">
+      <h3 className="sub" style={{ margin: 0 }}>按用途对账</h3>
+      <div className="usage-table-wrap">
+        <table className="usage-table">
+          <thead>
+            <tr>
+              <th>用途</th>
+              <th className="num">请求</th>
+              <th className="num">失败</th>
+              <th className="num">Prompt Tokens</th>
+              <th className="num">Completion Tokens</th>
+              <th className="num">Tokens 占比</th>
+              <th className="num">平均耗时</th>
+            </tr>
+          </thead>
+          <tbody>
+            {actions.map((a) => {
+              const gt = a.promptTokens + a.completionTokens;
+              const errRate = a.requests ? (a.errors / a.requests) * 100 : 0;
+              return (
+                <tr key={a.key}>
+                  <td>{actionLabel(a.key)}<span className="mono small faint" style={{ marginLeft: 6 }}>{a.key}</span></td>
+                  <td className="num">{a.requests}</td>
+                  <td className={'num' + (errRate >= 20 ? ' tone-red' : '')}>{a.errors}</td>
+                  <td className="num">{fmtTokens(a.promptTokens)}</td>
+                  <td className="num">{fmtTokens(a.completionTokens)}</td>
+                  <td className="num">
+                    <span className="usage-bar">
+                      <span className="usage-bar-fill" style={{ width: pct(gt, totalTokens) }} />
+                      <span className="usage-bar-text">{pct(gt, totalTokens)}</span>
+                    </span>
+                  </td>
+                  <td className="num">{a.avgLatencyMs != null ? `${a.avgLatencyMs}ms` : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** 错误码对账表：失败调用的错误码分布（含典型厂商/模型），便于定位哪个上游在报错。 */
+function ErrorCodeTable({ errorCodes }: { errorCodes: AiUsageStats['errorCodes'] }) {
+  if (errorCodes.length === 0) return null;
+  return (
+    <section className="panel">
+      <h3 className="sub" style={{ margin: 0 }}>错误码对账</h3>
+      <div className="usage-table-wrap">
+        <table className="usage-table">
+          <thead>
+            <tr>
+              <th>错误码</th>
+              <th className="num">次数</th>
+              <th>典型厂商</th>
+              <th>典型模型</th>
+            </tr>
+          </thead>
+          <tbody>
+            {errorCodes.map((e) => (
+              <tr key={e.code}>
+                <td className="mono tone-red">{e.code}</td>
+                <td className="num tone-red">{e.requests}</td>
+                <td className="mono small faint">{e.provider || '—'}</td>
+                <td className="mono small faint">{e.model || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** 导出当前范围的对账汇总为 CSV（厂商/模型/用途三张子表），便于与上游账单核对。 */
+function exportCsv(data: AiUsageStats) {
+  const esc = (v: unknown) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines: string[] = [];
+  lines.push('【按厂商对账】');
+  lines.push('厂商,请求,失败,Prompt Tokens,Completion Tokens,Tokens 合计,平均耗时ms,最近调用');
+  for (const g of data.providers) {
+    lines.push([g.key, g.requests, g.errors, g.promptTokens, g.completionTokens, g.promptTokens + g.completionTokens, g.avgLatencyMs ?? '', g.lastAt ?? ''].map(esc).join(','));
+  }
+  lines.push('');
+  lines.push('【按模型对账】');
+  lines.push('模型,厂商,请求,失败,Prompt Tokens,Completion Tokens,Tokens 合计,平均耗时ms,最近调用');
+  for (const g of data.models) {
+    lines.push([g.key, g.provider ?? '', g.requests, g.errors, g.promptTokens, g.completionTokens, g.promptTokens + g.completionTokens, g.avgLatencyMs ?? '', g.lastAt ?? ''].map(esc).join(','));
+  }
+  lines.push('');
+  lines.push('【按用途对账】');
+  lines.push('用途,请求,失败,Prompt Tokens,Completion Tokens,Tokens 合计,平均耗时ms');
+  for (const a of data.actions) {
+    lines.push([actionLabel(a.key), a.requests, a.errors, a.promptTokens, a.completionTokens, a.promptTokens + a.completionTokens, a.avgLatencyMs ?? ''].map(esc).join(','));
+  }
+
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ai-usage-${data.range}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function UsagePanel() {
   const [range, setRange] = useState<string>('30d');
 
@@ -161,6 +277,10 @@ export default function UsagePanel() {
             {r.label}
           </button>
         ))}
+        <span className="spacer" style={{ flex: 1 }} />
+        <button className="mini" onClick={() => data && exportCsv(data)} disabled={!data || data.totals.requests === 0} title="导出当前范围的对账汇总 CSV">
+          导出 CSV
+        </button>
       </div>
 
       {isLoading ? (
@@ -192,6 +312,8 @@ export default function UsagePanel() {
 
           <GroupTable title="按厂商对账" groups={data.providers} totalTokens={totalTokens} />
           <GroupTable title="按模型对账" groups={data.models} totalTokens={totalTokens} />
+          <ActionTable actions={data.actions} totalTokens={totalTokens} />
+          <ErrorCodeTable errorCodes={data.errorCodes} />
           <DailyTrend days={data.days} />
         </>
       )}

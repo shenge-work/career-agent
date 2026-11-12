@@ -238,59 +238,6 @@ function ModelPicker({
   );
 }
 
-/** 失败率告警阈值：当日失败率超过该百分比时标红提醒。 */
-const ERROR_RATE_ALERT = 20;
-
-/**
- * 用量 7 天迷你柱状图（成功/失败分色）+ 失败率告警。
- * 数据来自 status.usage.days（近 7 天，每项 { day, requests, errors }）。
- */
-function UsageChart({ days }: { days: Array<{ day: string; requests: number; errors: number }> }) {
-  const list = days.slice(0, 7);
-  const max = Math.max(1, ...list.map((d) => d.requests + d.errors));
-  const total = list.reduce((a, d) => a + d.requests + d.errors, 0);
-  const totalErr = list.reduce((a, d) => a + d.errors, 0);
-  const errRate = total > 0 ? (totalErr / total) * 100 : 0;
-  const overAlert = total > 0 && errRate >= ERROR_RATE_ALERT;
-
-  if (total === 0) {
-    return <p className="muted small">近 7 天还没有调用记录，配置并保存后即可开始使用 AI 能力。</p>;
-  }
-
-  return (
-    <div className="ai-usage-chart">
-      <div className="ai-chart-bars">
-        {list.map((d) => {
-          const ok = d.requests;
-          const err = d.errors;
-          const hOk = Math.max(err || ok ? 3 : 2, Math.round(((ok) / max) * 100));
-          const hErr = Math.max(err ? 3 : 0, Math.round(((err) / max) * 100));
-          const label = d.day.slice(5); // MM-DD
-          return (
-            <div className="ai-chart-col" key={d.day} title={`${d.day} · 成功 ${ok} / 失败 ${err}`}>
-              <div className="ai-chart-stack">
-                <div className="ai-chart-bar ai-bar-ok" style={{ height: `${hOk}%` }} />
-                {err > 0 && <div className="ai-chart-bar ai-bar-err" style={{ height: `${hErr}%` }} />}
-              </div>
-              <span className="ai-chart-label">{label}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="ai-chart-meta">
-        <span className="muted small">成功 {total - totalErr} · 失败 {totalErr}</span>
-        {overAlert ? (
-          <span className="status-badge tone-red" title={`近 7 天失败率 ${errRate.toFixed(0)}%，超过 ${ERROR_RATE_ALERT}% 告警阈值`}>
-            ⚠ 失败率 {errRate.toFixed(0)}%
-          </span>
-        ) : (
-          <span className="status-badge tone-green">失败率 {errRate.toFixed(0)}%</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 interface FormState {
   provider: string;
   baseUrl: string;
@@ -510,7 +457,7 @@ export default function AiSettings() {
             </div>
             <div className="ai-banner-side">
               <span className="muted small">
-                Key {status?.hasApiKey ? '已保存' : '未设置'} · 今日 {status?.usage?.todayRequests ?? 0} 次
+                Key {status?.hasApiKey ? '已保存' : '未设置'}
               </span>
               {activeProvider ? (
                 <button className="mini" onClick={() => testM.mutate()} disabled={testM.isPending}>
@@ -633,20 +580,7 @@ export default function AiSettings() {
             </div>
           )}
 
-          {/* 区块③：账号级用量 + 安全约束 */}
-          <h3 className="sub">用量（本账号）</h3>
-          <div className="kv">
-            <span>累计请求</span><span>{status?.usage?.requests ?? 0}</span>
-            <span>今日请求</span><span>{status?.usage?.todayRequests ?? 0}</span>
-            <span>失败次数</span><span>{status?.usage?.errors ?? 0}</span>
-            <span>平均耗时</span><span>{status?.usage?.avgLatencyMs != null ? `${status.usage.avgLatencyMs}ms` : '—'}</span>
-            <span>Prompt Tokens</span><span>{status?.usage?.totalPromptTokens ?? 0}</span>
-            <span>Completion Tokens</span><span>{status?.usage?.totalCompletionTokens ?? 0}</span>
-            <span>最近模型</span><span>{status?.usage?.lastModel || '—'}</span>
-            <span>最近调用</span><span>{fmtTime(status?.usage?.lastAt)}</span>
-          </div>
-          <UsageChart days={status?.usage?.days ?? []} />
-
+          {/* 区块③：安全约束 */}
           <h3 className="sub">安全约束</h3>
           <p className="muted small">
             上游地址只允许 https；http 仅限本机回环（本地 Ollama）。内网 / 云元数据等字面 IP 一律拒绝，

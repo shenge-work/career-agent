@@ -24,3 +24,19 @@ export function modelTierForAction(action?: string | null): ModelTier {
   if ((MODEL_USAGE_MAP.strong as readonly string[]).includes(a)) return 'strong';
   return 'fast';
 }
+
+/** 动作名 → 中文用途（用量统计「按用途对账」展示用；未知动作回退原样）。 */
+export const ACTION_LABELS: Readonly<Record<string, string>> = {
+  parseJd: 'JD 解析',
+  genPitch: '投递话术',
+  reviewInterview: '面试复盘',
+  kbAsk: '面经问答',
+  test: '连接测试',
+  chat: '试用台对话',
+  complete: '结构化补全',
+};
+
+export function actionLabel(action?: string | null): string {
+  const a = String(action || '');
+  return ACTION_LABELS[a] ?? a;
+}

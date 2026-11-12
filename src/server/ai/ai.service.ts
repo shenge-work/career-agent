@@ -290,6 +290,8 @@ export class AiService {
     const byProvider = new Map<string, { requests: number; errors: number; promptTokens: number; completionTokens: number; latencyMs: number; latencyCount: number; lastAt: string | null }>();
     const byModel = new Map<string, { provider: string | null; requests: number; errors: number; promptTokens: number; completionTokens: number; latencyMs: number; latencyCount: number; lastAt: string | null }>();
     const byDay = new Map<string, { requests: number; errors: number; promptTokens: number; completionTokens: number }>();
+    const byAction = new Map<string, { requests: number; errors: number; promptTokens: number; completionTokens: number; latencyMs: number; latencyCount: number }>();
+    const byErrorCode = new Map<string, { requests: number; provider: string | null; model: string | null }>();
 
     for (const r of rows) {
       const err = r.status === 'error' ? 1 : 0;
@@ -336,6 +338,24 @@ export class AiService {
       db.promptTokens += pt;
       db.completionTokens += ct;
       byDay.set(dkey, db);
+
+      // 用途维度（action：parseJd / genPitch / reviewInterview / kbAsk / test / chat）
+      const akey = r.action || '(未记录)';
+      const ab = byAction.get(akey) ?? { requests: 0, errors: 0, promptTokens: 0, completionTokens: 0, latencyMs: 0, latencyCount: 0 };
+      ab.requests += 1;
+      ab.errors += err;
+      ab.promptTokens += pt;
+      ab.completionTokens += ct;
+      if (typeof r.latencyMs === 'number' && r.latencyMs > 0) { ab.latencyMs += r.latencyMs; ab.latencyCount += 1; }
+      byAction.set(akey, ab);
+
+      // 错误码维度（仅失败调用）
+      if (err && r.errorCode) {
+        const ekey = r.errorCode;
+        const eb = byErrorCode.get(ekey) ?? { requests: 0, provider: r.provider ?? null, model: r.model ?? null };
+        eb.requests += 1;
+        byErrorCode.set(ekey, eb);
+      }
     }
 
     const fmt = (m: Map<string, any>) =>
@@ -366,6 +386,19 @@ export class AiService {
       },
       providers: fmt(byProvider),
       models: fmt(byModel),
+      actions: [...byAction.entries()]
+        .map(([key, v]) => ({
+          key,
+          requests: v.requests,
+          errors: v.errors,
+          promptTokens: v.promptTokens,
+          completionTokens: v.completionTokens,
+          avgLatencyMs: v.latencyCount ? Math.round(v.latencyMs / v.latencyCount) : null,
+        }))
+        .sort((a, b) => b.requests - a.requests),
+      errorCodes: [...byErrorCode.entries()]
+        .map(([key, v]) => ({ code: key, requests: v.requests, provider: v.provider, model: v.model }))
+        .sort((a, b) => b.requests - a.requests),
       days: [...byDay.entries()].map(([day, v]) => ({ day, ...v })).sort((a, b) => (a.day < b.day ? -1 : 1)),
     };
   }
