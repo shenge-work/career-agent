@@ -12,6 +12,7 @@ import ApplicationDetailPage from './pages/ApplicationDetailPage';
 import Portfolio from './pages/Portfolio';
 import Companies from './pages/Companies';
 import CompanyDetailPage from './pages/CompanyDetailPage';
+import CompanyCompare from './pages/CompanyCompare';
 import Referrals from './pages/Referrals';
 import Snippets from './pages/Snippets';
 import TrackerPage from './pages/Tracker';
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="/sync" element={<Sync />} />
           <Route path="/editor/:id" element={<Editor />} />
           <Route path="/companies" element={<Companies />} />
+          <Route path="/companies/compare" element={<CompanyCompare />} />
           <Route path="/companies/:id" element={<CompanyDetailPage />} />
           <Route path="/referrals" element={<Referrals />} />
           <Route path="/snippets" element={<Snippets />} />

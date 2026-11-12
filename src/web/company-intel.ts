@@ -130,6 +130,98 @@ export interface CompanyIntel {
 /** D7 六维调研维度（与迁移数据 `research[].dim` 完全一致） */
 export const RESEARCH_DIMS = ['公司简介', '团队情况', '盈利情况', '融资情况', '竞品分析', '风险与挑战'] as const;
 
+/** 「我的判断」推荐度：纯文字，禁止用颜色表达。 */
+export const VERDICT_LEVELS = ['优先投', '可投', '观望', '不投'] as const;
+
+/** 「面试与面经」轮次枚举。 */
+export const INTERVIEW_ROUNDS = ['一面', '二面', '三面', 'HR 面', '终面', '笔试', '其他'] as const;
+
+/** 「面试与面经」形式枚举。 */
+export const INTERVIEW_FORMS = ['电话', '视频', '现场', '笔试', '其他'] as const;
+
+/** 「待核实问题清单」状态枚举。 */
+export const QUESTION_STATUS = ['待核实', '已核实', '已证伪'] as const;
+
+/** 薪资周期枚举（§10.2.4 口径字典：周期显式可见，否则数据不可比）。 */
+export const SALARY_PERIODS = ['月薪', '年薪'] as const;
+
+/** 薪资币种枚举。 */
+export const SALARY_CURRENCIES = ['CNY'] as const;
+
+/** 融资轮次枚举（§10.5）。 */
+export const FUNDING_ROUNDS = [
+  '种子', '天使', 'Pre-A', 'A', 'A+', 'B', 'B+', 'C', 'C+', 'D', 'D+',
+  'E', 'Pre-IPO', 'IPO', '战略融资', '并购', '未披露',
+] as const;
+
+/** 融资币种枚举。 */
+export const FUNDING_CURRENCIES = ['CNY', 'USD'] as const;
+
+/** 薪资样本（§10.2.4）：按岗位族分箱，不做公司整体平均。 */
+export interface SalarySample {
+  id?: string;
+  role: string;         // 岗位族
+  level?: string;       // 职级
+  low: number;          // 下限（万元/月 或 万元/年，随 period）
+  high: number;         // 上限
+  avg?: number;         // 均值
+  currency?: string;    // 默认 CNY
+  period?: string;      // 月薪 | 年薪
+  months?: number;      // 薪资月数（13/14/16 薪）
+  sampleSize?: number;
+  source?: string;
+  date?: string;
+  note?: string;
+}
+
+/** 融资轮次（§10.5）。 */
+export interface FundingRound {
+  id?: string;
+  round: string;
+  date?: string;
+  amount?: number;      // 金额（万元/亿元，随 amountUnit）
+  amountUnit?: string;  // 万 | 亿
+  currency?: string;    // CNY | USD
+  investors?: string[];
+  valuation?: string;
+  source?: string;
+  note?: string;
+}
+
+/** 把 salaries[]/fundingRounds[] 规整为带缺省的类型化数组。 */
+export function normalizeSalaries(salaries?: Array<Record<string, any>>): SalarySample[] {
+  if (!Array.isArray(salaries)) return [];
+  return salaries.map((s) => ({
+    role: String(s.role || ''),
+    level: s.level,
+    low: Number(s.low) || 0,
+    high: Number(s.high) || 0,
+    avg: s.avg != null ? Number(s.avg) : undefined,
+    currency: s.currency || 'CNY',
+    period: s.period || '月薪',
+    months: s.months != null ? Number(s.months) : undefined,
+    sampleSize: s.sampleSize != null ? Number(s.sampleSize) : undefined,
+    source: s.source,
+    date: s.date,
+    note: s.note,
+  } as SalarySample));
+}
+
+export function normalizeFundingRounds(rounds?: Array<Record<string, any>>): FundingRound[] {
+  if (!Array.isArray(rounds)) return [];
+  return rounds.map((r) => ({
+    round: String(r.round || ''),
+    date: r.date,
+    amount: r.amount != null ? Number(r.amount) : undefined,
+    amountUnit: r.amountUnit || '亿',
+    currency: r.currency || 'CNY',
+    investors: Array.isArray(r.investors) ? r.investors : [],
+    valuation: r.valuation,
+    source: r.source,
+    note: r.note,
+  } as FundingRound));
+}
+
 /** 新字段全部可选、缺省补全；旧数据零迁移。 */
 export function normalizeCompany(raw: Record<string, any> | null | undefined): CompanyIntel {
   const c = (raw || {}) as CompanyIntel;
@@ -264,6 +356,118 @@ export function dimensionCoverage(c: CompanyRowLike): Coverage {
   return { covered, missing, ratio: covered.length / RESEARCH_DIMS.length };
 }
 
+/* ============================================================ 多公司对比 */
+
+/** 对比维度定义：key → 展示名。按「决策重要度」排序。 */
+export const COMPARE_DIMS = {
+  industry: '行业',
+  scale: '规模',
+  location: '地点',
+  website: '官网',
+  coverage: '完整度',
+  research: '调研条目',
+  jd: '岗位 JD',
+  referral: '内推',
+  recommendation: '推荐度',
+  expectedSalary: '期望薪资',
+  salaryRange: '薪资区间',
+  funding: '融资',
+  concerns: '关注点',
+  redline: '风险红线',
+  questions: '待核实问题',
+} as const;
+
+export type CompareDimKey = keyof typeof COMPARE_DIMS;
+
+/** 单家公司某一维度的对比单元格：文本值 + 是否缺失（用于灰态空位）。 */
+export interface CompareCell {
+  text: string;
+  /** true 表示该维度在这家公司没有数据（展示为空态）。 */
+  empty: boolean;
+}
+
+export type CompareRow = Record<CompareDimKey, CompareCell>;
+
+/** 薪资区间 → 对比摘要文本（如「25–40K×14 · 算法岗」）。 */
+function salarySummary(salaries: SalarySample[]): string {
+  if (!salaries.length) return '';
+  const s = salaries[0];
+  const unit = s.period === '年薪' ? '万/年' : 'K/月';
+  const fmt = (n?: number) => (n != null ? `${n}` : '?');
+  const range = `${fmt(s.low)}–${fmt(s.high)}${unit}`;
+  const months = s.months ? `×${s.months}` : '';
+  const role = s.role ? ` · ${s.role}` : '';
+  return `${range}${months}${role}`;
+}
+
+/** 融资 → 对比摘要文本（如「B轮 · 累计约3亿 · 2026」）。 */
+function fundingSummary(rounds: FundingRound[]): string {
+  if (!rounds.length) return '';
+  const latest = rounds[rounds.length - 1];
+  const round = latest.round || '未披露';
+  const total = rounds
+    .filter((r) => r.amount != null)
+    .reduce((n, r) => n + (r.amountUnit === '万' ? (r.amount! / 10000) : (r.amount!)), 0);
+  const totalText = total > 0 ? `累计约${total.toFixed(total >= 1 ? 1 : 3)}亿` : '';
+  const date = latest.date ? ` · ${latest.date}` : '';
+  return `${round}轮${totalText ? ` · ${totalText}` : ''}${date}`;
+}
+
+/**
+ * 把一家公司压成对比矩阵的一行。引用 `normalizeCompany` 保证与详情页口径一致。
+ * 额外注入 `referralCount`（内推数）与 `jdCount`（JD 数，来自关联表，不在 payload 内）。
+ */
+export function companyCompareRow(
+  company: CompanyRowLike,
+  opts: { referralCount?: number; jdCount?: number } = {}
+): CompareRow {
+  const c = normalizeCompany(company as CompanyIntel);
+  const cov = dimensionCoverage(c);
+  const cat = INDUSTRY_TAXONOMY[c.industryCategory || 'other-none'];
+  const catLabel = cat ? `${cat.group} · ${cat.label}` : c.industryCategory || '—';
+  const verdict = c.verdict as Record<string, any> | null | undefined;
+  const salaries = normalizeSalaries(c.salaries);
+  const rounds = normalizeFundingRounds(c.fundingRounds);
+
+  const cell = (text: string, empty: boolean): CompareCell => ({ text, empty });
+  const opt = (v: unknown): CompareCell => {
+    const s = String(v || '').trim();
+    return s ? cell(s, false) : cell('—', true);
+  };
+
+  return {
+    industry: opt(c.industry ? catLabel : catLabel),
+    scale: opt(c.scale),
+    location: opt(c.location),
+    website: opt(c.website),
+    coverage: cell(`${cov.covered.length}/6 维（${Math.round(cov.ratio * 100)}%）`, false),
+    research: cell(String(c.research?.length || 0), false),
+    jd: cell(String(opts.jdCount ?? c.jds?.length ?? 0), false),
+    referral: cell(String(opts.referralCount ?? 0), false),
+    recommendation: opt(verdict?.recommendation),
+    expectedSalary: opt(verdict?.expectedSalary),
+    salaryRange: opt(salarySummary(salaries)),
+    funding: opt(fundingSummary(rounds)),
+    concerns: opt(verdict?.concerns),
+    redline: opt(verdict?.redline),
+    questions: cell(
+      String((c.questions || []).filter((q: any) => !q.status || q.status === '待核实').length),
+      false
+    ),
+  };
+}
+
+/** 对比矩阵：维度为行、公司为列。rowKey 为维度 key，返回该维度所有公司的单元格。 */
+export function buildCompareTable(
+  rows: Array<{ name: string; row: CompareRow }>
+): Array<{ dim: CompareDimKey; label: string; cells: CompareCell[] }> {
+  return (Object.keys(COMPARE_DIMS) as CompareDimKey[]).map((dim) => ({
+    dim,
+    label: COMPARE_DIMS[dim],
+    cells: rows.map((r) => r.row[dim]),
+  }));
+}
+
 /* ============================================================ 简报 */
 
 export interface BriefConfig {
@@ -271,6 +475,8 @@ export interface BriefConfig {
   includeRumors?: boolean;
   includeVerdict?: boolean;
   includeJds?: boolean;
+  includeInterviews?: boolean;
+  includeQuestions?: boolean;
 }
 
 /** 脱敏白名单（纯函数）：风闻与私人判断默认排除，勾选需显式确认。 */
@@ -280,6 +486,8 @@ export function briefFilter(config: BriefConfig): BriefConfig {
     includeRumors: config.includeRumors === true,
     includeVerdict: config.includeVerdict === true,
     includeJds: config.includeJds !== false,
+    includeInterviews: config.includeInterviews === true,
+    includeQuestions: config.includeQuestions === true,
   };
 }
 
@@ -323,8 +531,28 @@ export function buildBrief(
     out.push('', '## 我的判断（内部）');
     const v = c.verdict as Record<string, any>;
     if (v.recommendation) out.push(`- 推荐度：${v.recommendation}`);
+    if (v.expectedSalary) out.push(`- 期望薪资 / 谈判底线：${mdEscape(v.expectedSalary)}`);
+    if (v.resumeFor) out.push(`- 对应简历：${mdEscape(v.resumeFor)}`);
     if (v.concerns) out.push(`- 关注点：${mdEscape(v.concerns)}`);
     if (v.redline) out.push(`- 风险红线：${mdEscape(v.redline)}`);
+  }
+  if (cfg.includeInterviews && c.interviews?.length) {
+    out.push('', '## 面试与面经');
+    for (const it of c.interviews) {
+      const head = [it.round, it.form, it.date].filter(Boolean).join(' · ');
+      out.push(`- **${head || '面试'}**${it.duration ? `（${it.duration}）` : ''}`);
+      if (it.questions) out.push(`  - 真题 / 内容：${mdEscape(it.questions)}`);
+      if (it.style) out.push(`  - 面试官风格：${mdEscape(it.style)}`);
+      if (it.feedback) out.push(`  - 反馈 / 结果：${mdEscape(it.feedback)}`);
+      if (it.offerDeadline) out.push(`  - offer 时效：${mdEscape(it.offerDeadline)}`);
+    }
+  }
+  if (cfg.includeQuestions && c.questions?.length) {
+    out.push('', '## 待核实问题清单');
+    for (const q of c.questions) {
+      const stat = q.status === '已核实' ? '' : ` _（${q.status || '待核实'}）_`;
+      out.push(`- ${String(q.text || '').trim()}${stat}`);
+    }
   }
   if (cfg.includeRumors && c.rumors?.length) {
     out.push('', '## 风闻 / 未证实（内部参考 · 请勿外传）');
@@ -335,4 +563,123 @@ export function buildBrief(
   const sourceCount = (c.research || []).length;
   out.push('', '---', `生成于 CareerAgent · 信息以原始来源为准 · 本简报引用 ${sourceCount} 条调研`);
   return out.join('\n');
+}
+
+/* ============================================================ 简报图片 */
+
+/** HTML 转义，简报图片用的最小实现。 */
+const htmlEscape = (s: unknown) =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+/** 极简 Markdown → HTML（简报图片版）：只处理标题 / 引用 / 列表 / 粗体 / 分隔线。 */
+function briefMarkdownToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let listOpen = false;
+
+  const closeList = () => {
+    if (listOpen) {
+      out.push('</ul>');
+      listOpen = false;
+    }
+  };
+
+  for (const raw of lines) {
+    const line = raw;
+    if (/^# /.test(line)) {
+      closeList();
+      out.push(`<h1>${htmlEscape(line.slice(2))}</h1>`);
+    } else if (/^## /.test(line)) {
+      closeList();
+      out.push(`<h2>${htmlEscape(line.slice(3))}</h2>`);
+    } else if (/^> /.test(line)) {
+      closeList();
+      out.push(`<p class="meta">${htmlEscape(line.slice(2))}</p>`);
+    } else if (/^---$/.test(line)) {
+      closeList();
+      out.push('<hr/>');
+    } else if (/^- /.test(line)) {
+      if (!listOpen) {
+        out.push('<ul>');
+        listOpen = true;
+      }
+      const body = line.slice(2);
+      // 先转义，再把 **粗体** / `code` 标记替换为标签
+      const rich = htmlEscape(body)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      out.push(`<li>${rich}</li>`);
+    } else if (/^\s{2}- /.test(line)) {
+      // 子列表（JD 的「  - 要求：」），简化：并入上一个 li 作为段落
+      if (listOpen) {
+        out.push(`<li class="sub">${htmlEscape(line.trim().slice(2))}</li>`);
+      }
+    } else if (line.trim() === '') {
+      // 空行：关闭列表以保持块状结构
+      closeList();
+    } else {
+      closeList();
+      // 先转义，再把 **粗体** / `code` 标记替换为标签
+      const rich = htmlEscape(line)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      out.push(`<p>${rich}</p>`);
+    }
+  }
+  closeList();
+  return out.join('\n');
+}
+
+/**
+ * 把 Markdown 简报包成一张固定宽度、强制浅色、黑白灰的导出 HTML（§10.3）。
+ * 不引入任何外部资源，字体走系统栈；供服务端 headless Chrome 截图成 PNG。
+ */
+export function buildBriefHtml(md: string, opts: { watermark?: boolean } = {}): string {
+  const body = briefMarkdownToHtml(md);
+  const watermark = opts.watermark
+    ? '<div class="watermark">内部参考 · 请勿外传</div>'
+    : '';
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    width: 720px;
+    margin: 0;
+    padding: 36px 40px;
+    background: #ffffff;
+    color: #1a1a1a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 20px;
+    line-height: 1.7;
+  }
+  h1 { font-size: 30px; margin: 0 0 12px; border-bottom: 2px solid #e0e0e0; padding-bottom: 12px; }
+  h2 { font-size: 22px; margin: 26px 0 10px; color: #111; }
+  p { margin: 8px 0; }
+  p.meta { color: #666; font-size: 16px; }
+  ul { margin: 6px 0; padding-left: 24px; }
+  li { margin: 6px 0; }
+  li.sub { list-style: none; color: #555; font-size: 17px; margin-left: -24px; }
+  strong { font-weight: 600; color: #000; }
+  code { background: #f2f2f2; padding: 1px 6px; border-radius: 4px; font-size: 17px; }
+  hr { border: none; border-top: 1px solid #e0e0e0; margin: 24px 0 10px; }
+  .watermark {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-28deg);
+    font-size: 60px; font-weight: 600; color: rgba(0,0,0,0.08); white-space: nowrap;
+    pointer-events: none; z-index: 10;
+  }
+</style>
+</head>
+<body>
+${watermark}
+${body}
+</body>
+</html>`;
 }

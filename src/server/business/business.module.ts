@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { RenderModule } from '../render/render.module';
 import { TenantDb } from '../tenant/tenant-db';
 import { BusinessService } from './business.service';
 import { ApplicationsController } from './applications.controller';
@@ -11,7 +12,7 @@ import { TrackerController } from './tracker.controller';
 import { VersionsController } from './versions.controller';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, RenderModule],
   controllers: [
     ApplicationsController,
     CompaniesController,

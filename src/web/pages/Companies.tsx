@@ -106,10 +106,17 @@ export default function Companies() {
   return (
     <>
       <div className="page-head">
-        <h1>公司档案</h1>
-        <p className="muted small">
-          求职情报底座：只沉淀公司本身信息与岗位 JD，不展示任何投递状态。点击进入详情页查看完整调研。
-        </p>
+        <div className="section-head">
+          <div>
+            <h1>公司档案</h1>
+            <p className="muted small">
+              求职情报底座：只沉淀公司本身信息与岗位 JD，不展示任何投递状态。点击进入详情页查看完整调研。
+            </p>
+          </div>
+          <Link to="/companies/compare" className="mini primary" style={{ whiteSpace: 'nowrap' }}>
+            横向对比
+          </Link>
+        </div>
       </div>
       {error && <div className="alert">{error}</div>}
 

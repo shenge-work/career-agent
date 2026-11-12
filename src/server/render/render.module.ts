@@ -10,5 +10,6 @@ import { ImagePdfService } from './image-pdf.service';
   imports: [AuthModule],
   controllers: [RenderController],
   providers: [TenantDb, ResumesService, PdfService, ImagePdfService],
+  exports: [PdfService],
 })
 export class RenderModule {}

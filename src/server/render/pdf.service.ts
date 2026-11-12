@@ -137,4 +137,64 @@ export class PdfService {
       try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 清理失败不影响结果 */ }
     }
   }
+
+  /**
+   * 把一张固定宽度 HTML（如简报图片版）截成 PNG（§10.3）。
+   * `--screenshot` 默认截视口全高；HTML 里 body 固定 width:720px 即出固定宽度长图。
+   * 浏览器缺失时抛 NoBrowserError，由调用方诚实降级 501。
+   */
+  async screenshotHtml(html: string): Promise<Buffer> {
+    const browser = findBrowser();
+    if (!browser) throw new NoBrowserError();
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'career-agent-shot-'));
+    const htmlPath = path.join(tmp, 'brief.html');
+    const pngPath = path.join(tmp, 'brief.png');
+    const userDir = path.join(tmp, 'chrome-profile');
+    fs.writeFileSync(htmlPath, html, 'utf8');
+
+    const runOnce = async (headlessFlag: string, waitMs: number): Promise<boolean> => {
+      try { fs.rmSync(pngPath, { force: true }); } catch { /* ignore */ }
+      let child;
+      try {
+        child = spawn(
+          browser,
+          [
+            headlessFlag,
+            '--disable-gpu', '--no-sandbox', '--no-first-run', '--no-default-browser-check',
+            '--user-data-dir=' + userDir,
+            '--hide-scrollbars',
+            '--force-device-scale-factor=2',
+            '--virtual-time-budget=8000',
+            '--window-size=720,1200',
+            '--screenshot=' + pngPath,
+            'file://' + htmlPath.replace(/\\/g, '/'),
+          ],
+          { stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+      } catch {
+        return false;
+      }
+      child.stdout?.on('data', () => {});
+      child.stderr?.on('data', () => {});
+      const ok = await waitForFile(pngPath, waitMs);
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      return ok;
+    };
+
+    try {
+      let produced = await runOnce('--headless=new', 45_000);
+      if (!produced) produced = await runOnce('--headless', 45_000);
+      if (!produced || !fs.existsSync(pngPath)) {
+        throw new Error('浏览器未在超时内产出图片，请重试');
+      }
+      const buf = fs.readFileSync(pngPath);
+      if (buf.subarray(1, 4).toString('latin1') !== 'PNG') {
+        throw new Error('截图产物不是合法 PNG');
+      }
+      return buf;
+    } finally {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
 }

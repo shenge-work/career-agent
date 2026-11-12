@@ -3005,3 +3005,108 @@ pre.pitch-text { font-family: inherit; }
   .ref-quick { grid-template-columns: 1fr 1fr; }
   .ref-form-row.three { grid-template-columns: 1fr; }
 }
+
+/* ===== 决策闭环：我的判断 / 面试面经 / 待核实问题 ===== */
+.verdict-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  margin-bottom: 12px;
+}
+.verdict-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.verdict-level {
+  font-size: 14px;
+  font-weight: 600;
+}
+.verdict-kv {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.verdict-kv > div {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+.verdict-kv dt {
+  color: var(--text-muted, var(--muted, #999));
+  white-space: nowrap;
+}
+.verdict-kv dd {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.verdict-card .btn-row { margin-top: 0; }
+
+/* ===== 多公司横向对比 ===== */
+button.co-card.compare-pick {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: 1px solid var(--border);
+}
+button.co-card.compare-pick.picked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.compare-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 520px;
+}
+.compare-table th,
+.compare-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+.compare-table thead th {
+  background: var(--surface-2);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+.compare-table tbody tr:last-child th,
+.compare-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.compare-table .compare-dim-col {
+  width: 120px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.compare-table td.empty {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.compare-table tr.diff td {
+  font-weight: 500;
+}
+.compare-table .diff-mark {
+  margin-left: 6px;
+  font-weight: 400;
+}
+.compare-company {
+  color: var(--text);
+  text-decoration: none;
+}
+.compare-company:hover {
+  text-decoration: underline;
+}

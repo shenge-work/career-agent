@@ -7,8 +7,18 @@ import {
   buildBrief,
   dimensionCoverage,
   expandIndustryQuery,
+  FUNDING_CURRENCIES,
+  FUNDING_ROUNDS,
   INDUSTRY_TAXONOMY,
+  INTERVIEW_FORMS,
+  INTERVIEW_ROUNDS,
+  normalizeFundingRounds,
+  normalizeSalaries,
+  QUESTION_STATUS,
   RESEARCH_DIMS,
+  SALARY_CURRENCIES,
+  SALARY_PERIODS,
+  VERDICT_LEVELS,
   type CompanyIntel,
 } from '../company-intel';
 import {
@@ -27,11 +37,13 @@ export default function CompanyDetailPage() {
   const [error, setError] = useState('');
   const [newJd, setNewJd] = useState('');
   const [briefOpen, setBriefOpen] = useState(false);
-  const [briefCfg, setBriefCfg] = useState<{ sections: string[]; includeJds: boolean; includeRumors: boolean; includeVerdict: boolean }>({
+  const [briefCfg, setBriefCfg] = useState<{ sections: string[]; includeJds: boolean; includeRumors: boolean; includeVerdict: boolean; includeInterviews: boolean; includeQuestions: boolean }>({
     sections: [...RESEARCH_DIMS],
     includeJds: true,
     includeRumors: false,
     includeVerdict: false,
+    includeInterviews: false,
+    includeQuestions: false,
   });
   const [copied, setCopied] = useState('');
   const [editSummary, setEditSummary] = useState('');
@@ -43,6 +55,23 @@ export default function CompanyDetailPage() {
   const [quickRef, setQuickRef] = useState({ referrer: '', position: '', channel: '', status: 'pending' });
   const [deleteCompanyOpen, setDeleteCompanyOpen] = useState(false);
   const [deleteReferralId, setDeleteReferralId] = useState<string | null>(null);
+
+  // 决策闭环三件套：我的判断 / 面试面经 / 待核实问题
+  const [verdictDraft, setVerdictDraft] = useState<{
+    recommendation: string; expectedSalary: string; resumeFor: string; concerns: string; redline: string;
+  }>({ recommendation: '', expectedSalary: '', resumeFor: '', concerns: '', redline: '' });
+  const [interviewDraft, setInterviewDraft] = useState<{
+    round: string; form: string; date: string; duration: string; questions: string; style: string; feedback: string; offerDeadline: string;
+  }>({ round: '', form: '', date: '', duration: '', questions: '', style: '', feedback: '', offerDeadline: '' });
+  const [questionDraft, setQuestionDraft] = useState({ text: '' });
+
+  // 薪资样本 / 融资轮次录入
+  const [salaryDraft, setSalaryDraft] = useState<{
+    role: string; level: string; low: string; high: string; avg: string; period: string; months: string; sampleSize: string; source: string; date: string; note: string;
+  }>({ role: '', level: '', low: '', high: '', avg: '', period: '月薪', months: '', sampleSize: '', source: '', date: '', note: '' });
+  const [fundingDraft, setFundingDraft] = useState<{
+    round: string; date: string; amount: string; amountUnit: string; currency: string; investors: string; valuation: string; source: string; note: string;
+  }>({ round: '', date: '', amount: '', amountUnit: '亿', currency: 'CNY', investors: '', valuation: '', source: '', note: '' });
 
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ['companies'],
@@ -118,6 +147,14 @@ export default function CompanyDetailPage() {
     onError: onFail,
   });
 
+  /** 决策闭环三件套：verdict / interviews / questions 统一走这个整包写回。 */
+  const patchM = useMutation({
+    mutationFn: (patch: Record<string, unknown>) =>
+      put<CompanyItem>(`/companies/${id}`, { payload: { ...(company?.payload || {}), ...patch } }),
+    onSuccess: invalidateCompanies,
+    onError: onFail,
+  });
+
   const addReferralM = useMutation({
     mutationFn: () =>
       post<ReferralItem>('/referrals', {
@@ -173,6 +210,48 @@ export default function CompanyDetailPage() {
     a.download = `${(company?.name || '公司').replace(/[\\/:*?"<>|]/g, '_')}-公司简报.md`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  const [pngBusy, setPngBusy] = useState(false);
+  const [pngError, setPngError] = useState('');
+
+  /** 简报 PNG：走服务端 headless Chrome 截图（同源 cookie 自动带上鉴权）。 */
+  async function downloadBriefPng() {
+    if (!company) return;
+    setPngBusy(true);
+    setPngError('');
+    try {
+      const q = new URLSearchParams({
+        rumors: briefCfg.includeRumors ? '1' : '0',
+        verdict: briefCfg.includeVerdict ? '1' : '0',
+        interviews: briefCfg.includeInterviews ? '1' : '0',
+        questions: briefCfg.includeQuestions ? '1' : '0',
+      });
+      const resp = await fetch(`/api/companies/${company.id}/brief.png?${q.toString()}`, {
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        let msg = `生成失败（${resp.status}）`;
+        try {
+          const j = await resp.json();
+          if (j?.hint) msg += `：${j.hint}`;
+          else if (j?.error) msg += `：${j.error}`;
+        } catch { /* 非 JSON 响应忽略 */ }
+        setPngError(msg);
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(company.name || '公司').replace(/[\\/:*?"<>|]/g, '_')}-公司简报.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (e) {
+      setPngError((e as Error).message || '生成失败');
+    } finally {
+      setPngBusy(false);
+    }
   }
 
   if (isLoading) return <p className="muted">加载中…</p>;
@@ -500,15 +579,579 @@ export default function CompanyDetailPage() {
               />
               我的判断（内部）
             </label>
+            <label className="check-line">
+              <input
+                type="checkbox"
+                checked={briefCfg.includeInterviews}
+                onChange={(e) => setBriefCfg((c) => ({ ...c, includeInterviews: e.target.checked }))}
+              />
+              面试与面经
+            </label>
+            <label className="check-line">
+              <input
+                type="checkbox"
+                checked={briefCfg.includeQuestions}
+                onChange={(e) => setBriefCfg((c) => ({ ...c, includeQuestions: e.target.checked }))}
+              />
+              待核实问题
+            </label>
           </div>
           <textarea className="mono brief-out" rows={12} value={briefMd} readOnly spellCheck={false} />
           <div className="btn-row" style={{ marginTop: 12 }}>
             <button className="mini primary" onClick={copyBrief}>复制 Markdown</button>
             <button className="mini" onClick={downloadBrief}>下载 .md</button>
+            <button className="mini" onClick={downloadBriefPng} disabled={pngBusy}>
+              {pngBusy ? '生成中…' : '下载图片 PNG'}
+            </button>
+            {pngError && <span className="muted small">{pngError}</span>}
             {copied && <span className="muted small">{copied}</span>}
           </div>
         </section>
       )}
+
+      {/* 我的判断（决策闭环） */}
+      <section className="detail-section">
+        <h3 className="sub">我的判断（决策结论）</h3>
+        {intel.verdict ? (
+          <div className="verdict-card">
+            <div className="verdict-head">
+              {intel.verdict.recommendation ? (
+                <strong className="verdict-level">{intel.verdict.recommendation}</strong>
+              ) : (
+                <span className="muted small">未标推荐度</span>
+              )}
+            </div>
+            <dl className="verdict-kv">
+              {intel.verdict.expectedSalary && (
+                <div><dt>期望薪资 / 谈判底线</dt><dd>{intel.verdict.expectedSalary}</dd></div>
+              )}
+              {intel.verdict.resumeFor && (
+                <div><dt>对应简历</dt><dd>{intel.verdict.resumeFor}</dd></div>
+              )}
+              {intel.verdict.concerns && (
+                <div><dt>关注点</dt><dd>{intel.verdict.concerns}</dd></div>
+              )}
+              {intel.verdict.redline && (
+                <div><dt>风险红线</dt><dd>{intel.verdict.redline}</dd></div>
+              )}
+            </dl>
+            <div className="btn-row">
+              <button
+                className="mini danger"
+                disabled={patchM.isPending}
+                onClick={() => patchM.mutate({ verdict: null })}
+              >
+                清除判断
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="muted small">还没有记录判断结论。投递前把「值不值得投、要什么价、踩什么红线」落下来。</p>
+        )}
+        <div className="form-grid" style={{ marginTop: 12 }}>
+          <label>
+            推荐度
+            <select
+              value={verdictDraft.recommendation || (intel.verdict?.recommendation as string) || ''}
+              onChange={(e) => setVerdictDraft((d) => ({ ...d, recommendation: e.target.value }))}
+            >
+              <option value="">—</option>
+              {VERDICT_LEVELS.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            期望薪资 / 谈判底线
+            <input
+              value={verdictDraft.expectedSalary}
+              onChange={(e) => setVerdictDraft((d) => ({ ...d, expectedSalary: e.target.value }))}
+              placeholder="如：30K×14，底线 28K"
+            />
+          </label>
+          <label>
+            对应简历
+            <input
+              value={verdictDraft.resumeFor}
+              onChange={(e) => setVerdictDraft((d) => ({ ...d, resumeFor: e.target.value }))}
+              placeholder="如：AI 工程师主简历"
+            />
+          </label>
+          <label>
+            关注点
+            <input
+              value={verdictDraft.concerns}
+              onChange={(e) => setVerdictDraft((d) => ({ ...d, concerns: e.target.value }))}
+              placeholder="如：现金流、加班"
+            />
+          </label>
+          <label>
+            风险红线
+            <input
+              value={verdictDraft.redline}
+              onChange={(e) => setVerdictDraft((d) => ({ ...d, redline: e.target.value }))}
+              placeholder="如：不接受大小周"
+            />
+          </label>
+        </div>
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button
+            className="mini primary"
+            disabled={patchM.isPending}
+            onClick={() => {
+              const v = {
+                ...(intel.verdict || {}),
+                recommendation: verdictDraft.recommendation || (intel.verdict?.recommendation as string) || '',
+                expectedSalary: verdictDraft.expectedSalary || (intel.verdict?.expectedSalary as string) || '',
+                resumeFor: verdictDraft.resumeFor || (intel.verdict?.resumeFor as string) || '',
+                concerns: verdictDraft.concerns || (intel.verdict?.concerns as string) || '',
+                redline: verdictDraft.redline || (intel.verdict?.redline as string) || '',
+              };
+              patchM.mutate({ verdict: v });
+              setVerdictDraft({ recommendation: '', expectedSalary: '', resumeFor: '', concerns: '', redline: '' });
+            }}
+          >
+            保存判断
+          </button>
+        </div>
+      </section>
+
+      {/* 面试与面经 */}
+      <section className="detail-section">
+        <h3 className="sub">面试与面经（{(intel.interviews || []).length}）</h3>
+        {(intel.interviews || []).length ? (
+          <ul className="mini-list">
+            {(intel.interviews || []).map((it: any, i: number) => (
+              <li key={it.id || i}>
+                <div className="ref-row-head">
+                  <strong>
+                    {[it.round, it.form, it.date].filter(Boolean).join(' · ') || '面试'}
+                    {it.duration ? `（${it.duration}）` : ''}
+                  </strong>
+                </div>
+                {it.questions && <div className="muted small clamp-4">{it.questions}</div>}
+                {it.style && <div className="muted small">面试官风格：{it.style}</div>}
+                {it.feedback && <div className="muted small">反馈 / 结果：{it.feedback}</div>}
+                {it.offerDeadline && <div className="muted small">offer 时效：{it.offerDeadline}</div>}
+                <div className="btn-row">
+                  <button
+                    className="mini danger"
+                    disabled={patchM.isPending}
+                    onClick={() =>
+                      patchM.mutate({ interviews: (intel.interviews || []).filter((_: any, idx: number) => idx !== i) })
+                    }
+                  >
+                    删除
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">暂无面经。这家公司「怎么面人」的信息记这里。</p>
+        )}
+        <details className="detail-section" style={{ marginTop: 8 }}>
+          <summary className="sub">添加一条面经</summary>
+          <div className="form-grid">
+            <label>
+              轮次
+              <select
+                value={interviewDraft.round}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, round: e.target.value }))}
+              >
+                <option value="">—</option>
+                {INTERVIEW_ROUNDS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              形式
+              <select
+                value={interviewDraft.form}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, form: e.target.value }))}
+              >
+                <option value="">—</option>
+                {INTERVIEW_FORMS.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              日期
+              <input
+                value={interviewDraft.date}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, date: e.target.value }))}
+                placeholder="2026-11"
+              />
+            </label>
+            <label>
+              时长
+              <input
+                value={interviewDraft.duration}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, duration: e.target.value }))}
+                placeholder="如：60 分钟"
+              />
+            </label>
+            <label>
+              真题 / 内容
+              <textarea
+                rows={3}
+                value={interviewDraft.questions}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, questions: e.target.value }))}
+                placeholder="问了什么、考了什么"
+              />
+            </label>
+            <label>
+              面试官风格
+              <input
+                value={interviewDraft.style}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, style: e.target.value }))}
+                placeholder="如：追问系统设计"
+              />
+            </label>
+            <label>
+              反馈 / 结果
+              <input
+                value={interviewDraft.feedback}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, feedback: e.target.value }))}
+                placeholder="如：算法偏弱"
+              />
+            </label>
+            <label>
+              offer 时效
+              <input
+                value={interviewDraft.offerDeadline}
+                onChange={(e) => setInterviewDraft((d) => ({ ...d, offerDeadline: e.target.value }))}
+                placeholder="如：3 天内回复"
+              />
+            </label>
+          </div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button
+              className="mini primary"
+              disabled={patchM.isPending}
+              onClick={() => {
+                const it = {
+                  id: `int-${Date.now()}`,
+                  round: interviewDraft.round,
+                  form: interviewDraft.form,
+                  date: interviewDraft.date,
+                  duration: interviewDraft.duration,
+                  questions: interviewDraft.questions,
+                  style: interviewDraft.style,
+                  feedback: interviewDraft.feedback,
+                  offerDeadline: interviewDraft.offerDeadline,
+                };
+                patchM.mutate({ interviews: [...(intel.interviews || []), it] });
+                setInterviewDraft({ round: '', form: '', date: '', duration: '', questions: '', style: '', feedback: '', offerDeadline: '' });
+              }}
+            >
+              添加面经
+            </button>
+          </div>
+        </details>
+      </section>
+
+      {/* 待核实问题清单 */}
+      <section className="detail-section">
+        <h3 className="sub">待核实问题清单（{(intel.questions || []).length}）</h3>
+        {(intel.questions || []).length ? (
+          <ul className="mini-list">
+            {(intel.questions || []).map((q: any, i: number) => (
+              <li key={q.id || i}>
+                <div className="ref-row-head">
+                  <span>{q.text}</span>
+                  <span className="tag">{q.status || '待核实'}</span>
+                </div>
+                <div className="btn-row">
+                  {q.status !== '已核实' && (
+                    <button
+                      className="mini"
+                      disabled={patchM.isPending}
+                      onClick={() =>
+                        patchM.mutate({
+                          questions: (intel.questions || []).map((_: any, idx: number) =>
+                            idx === i ? { ..._, status: '已核实' } : _
+                          ),
+                        })
+                      }
+                    >
+                      标记已核实
+                    </button>
+                  )}
+                  <button
+                    className="mini danger"
+                    disabled={patchM.isPending}
+                    onClick={() =>
+                      patchM.mutate({ questions: (intel.questions || []).filter((_: any, idx: number) => idx !== i) })
+                    }
+                  >
+                    删除
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">把「不知道的」显式记下来，驱动下一次采集——融资是否到账、团队是否扩张、这个岗是不是新设。</p>
+        )}
+        <form
+          className="row compact"
+          style={{ marginTop: 8 }}
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            if (!questionDraft.text.trim()) return;
+            patchM.mutate({
+              questions: [...(intel.questions || []), { id: `q-${Date.now()}`, text: questionDraft.text.trim(), status: '待核实' }],
+            });
+            setQuestionDraft({ text: '' });
+          }}
+        >
+          <input
+            value={questionDraft.text}
+            onChange={(e) => setQuestionDraft({ text: e.target.value })}
+            placeholder="如：融资 B 轮是否已到账？"
+          />
+          <button className="mini" type="submit" disabled={patchM.isPending || !questionDraft.text.trim()}>
+            添加
+          </button>
+        </form>
+      </section>
+
+      {/* 薪资水平（按岗位族分箱） */}
+      <section className="detail-section">
+        <h3 className="sub">薪资水平（{(intel.salaries || []).length}）</h3>
+        {(intel.salaries || []).length ? (
+          <ul className="mini-list">
+            {normalizeSalaries(intel.salaries).map((s: any, i: number) => (
+              <li key={s.id || i}>
+                <div className="ref-row-head">
+                  <strong>
+                    {s.role || '岗位'} {s.level ? `· ${s.level}` : ''}
+                  </strong>
+                  <span className="tag">
+                    {s.period === '年薪' ? `${s.low}–${s.high} 万/年` : `${s.low}–${s.high}K/月`}
+                    {s.months ? ` ×${s.months}` : ''}
+                  </span>
+                </div>
+                {s.avg != null && <div className="muted small">均值 {s.avg}（{s.currency || 'CNY'}）</div>}
+                {(s.sampleSize != null || s.source || s.date) && (
+                  <div className="muted small">
+                    {s.sampleSize != null ? `样本 ${s.sampleSize}` : ''}
+                    {s.source ? ` · 来源 ${s.source}` : ''}
+                    {s.date ? ` · ${s.date}` : ''}
+                  </div>
+                )}
+                {s.note && <div className="muted small clamp-4">{s.note}</div>}
+                <div className="btn-row">
+                  <button
+                    className="mini danger"
+                    disabled={patchM.isPending}
+                    onClick={() => patchM.mutate({ salaries: (intel.salaries || []).filter((_: any, idx: number) => idx !== i) })}
+                  >
+                    删除
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">暂无薪资样本。员工自述样本，仅供参考；按岗位族分箱，不做公司整体平均。</p>
+        )}
+        <details className="detail-section" style={{ marginTop: 8 }}>
+          <summary className="sub">添加薪资样本</summary>
+          <div className="form-grid two">
+            <label>
+              岗位族
+              <input value={salaryDraft.role} onChange={(e) => setSalaryDraft((d) => ({ ...d, role: e.target.value }))} placeholder="如：算法 / 后端" />
+            </label>
+            <label>
+              职级
+              <input value={salaryDraft.level} onChange={(e) => setSalaryDraft((d) => ({ ...d, level: e.target.value }))} placeholder="如：P6 / 3-1" />
+            </label>
+            <label>
+              下限（{salaryDraft.period === '年薪' ? '万/年' : 'K/月'}）
+              <input value={salaryDraft.low} onChange={(e) => setSalaryDraft((d) => ({ ...d, low: e.target.value }))} placeholder="25" />
+            </label>
+            <label>
+              上限（{salaryDraft.period === '年薪' ? '万/年' : 'K/月'}）
+              <input value={salaryDraft.high} onChange={(e) => setSalaryDraft((d) => ({ ...d, high: e.target.value }))} placeholder="40" />
+            </label>
+            <label>
+              均值（可选）
+              <input value={salaryDraft.avg} onChange={(e) => setSalaryDraft((d) => ({ ...d, avg: e.target.value }))} placeholder="32" />
+            </label>
+            <label>
+              周期
+              <select value={salaryDraft.period} onChange={(e) => setSalaryDraft((d) => ({ ...d, period: e.target.value }))}>
+                {SALARY_PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+            <label>
+              薪资月数（13/14/16 薪）
+              <input value={salaryDraft.months} onChange={(e) => setSalaryDraft((d) => ({ ...d, months: e.target.value }))} placeholder="14" />
+            </label>
+            <label>
+              样本数
+              <input value={salaryDraft.sampleSize} onChange={(e) => setSalaryDraft((d) => ({ ...d, sampleSize: e.target.value }))} placeholder="5" />
+            </label>
+            <label>
+              来源
+              <input value={salaryDraft.source} onChange={(e) => setSalaryDraft((d) => ({ ...d, source: e.target.value }))} placeholder="脉脉 / OfferShow" />
+            </label>
+            <label>
+              采集日期
+              <input value={salaryDraft.date} onChange={(e) => setSalaryDraft((d) => ({ ...d, date: e.target.value }))} placeholder="2026-11" />
+            </label>
+            <label>
+              备注
+              <input value={salaryDraft.note} onChange={(e) => setSalaryDraft((d) => ({ ...d, note: e.target.value }))} placeholder="含绩效 / 不含股" />
+            </label>
+          </div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button
+              className="mini primary"
+              disabled={patchM.isPending || !salaryDraft.role.trim()}
+              onClick={() => {
+                const s = {
+                  id: `sal-${Date.now()}`,
+                  role: salaryDraft.role.trim(),
+                  level: salaryDraft.level.trim(),
+                  low: Number(salaryDraft.low) || 0,
+                  high: Number(salaryDraft.high) || 0,
+                  avg: salaryDraft.avg ? Number(salaryDraft.avg) : undefined,
+                  period: salaryDraft.period,
+                  months: salaryDraft.months ? Number(salaryDraft.months) : undefined,
+                  sampleSize: salaryDraft.sampleSize ? Number(salaryDraft.sampleSize) : undefined,
+                  currency: 'CNY',
+                  source: salaryDraft.source.trim(),
+                  date: salaryDraft.date.trim(),
+                  note: salaryDraft.note.trim(),
+                };
+                patchM.mutate({ salaries: [...(intel.salaries || []), s] });
+                setSalaryDraft({ role: '', level: '', low: '', high: '', avg: '', period: '月薪', months: '', sampleSize: '', source: '', date: '', note: '' });
+              }}
+            >
+              添加薪资样本
+            </button>
+          </div>
+        </details>
+      </section>
+
+      {/* 连续融资情况 */}
+      <section className="detail-section">
+        <h3 className="sub">连续融资（{(intel.fundingRounds || []).length}）</h3>
+        {(intel.fundingRounds || []).length ? (
+          <ul className="mini-list">
+            {normalizeFundingRounds(intel.fundingRounds).map((r: any, i: number) => (
+              <li key={r.id || i}>
+                <div className="ref-row-head">
+                  <strong>
+                    {r.round} {r.date ? `· ${r.date}` : ''}
+                  </strong>
+                  <span className="tag">
+                    {r.amount != null ? `${r.amount}${r.amountUnit || '亿'} ${r.currency || 'CNY'}` : '金额未披露'}
+                  </span>
+                </div>
+                {(r.investors?.length || r.valuation) && (
+                  <div className="muted small">
+                    {r.investors?.length ? `投资方 ${r.investors.join('、')}` : ''}
+                    {r.valuation ? ` · 估值 ${r.valuation}` : ''}
+                  </div>
+                )}
+                {(r.source || r.note) && (
+                  <div className="muted small">{r.source ? `来源 ${r.source}` : ''}{r.note ? ` · ${r.note}` : ''}</div>
+                )}
+                <div className="btn-row">
+                  <button
+                    className="mini danger"
+                    disabled={patchM.isPending}
+                    onClick={() => patchM.mutate({ fundingRounds: (intel.fundingRounds || []).filter((_: any, idx: number) => idx !== i) })}
+                  >
+                    删除
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">暂无融资轮次数据。补充轮次数据即可生成融资节奏（累计额 / 轮次数 / 间隔）。</p>
+        )}
+        <details className="detail-section" style={{ marginTop: 8 }}>
+          <summary className="sub">添加融资轮次</summary>
+          <div className="form-grid two">
+            <label>
+              轮次
+              <select value={fundingDraft.round} onChange={(e) => setFundingDraft((d) => ({ ...d, round: e.target.value }))}>
+                <option value="">—</option>
+                {FUNDING_ROUNDS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label>
+              日期
+              <input value={fundingDraft.date} onChange={(e) => setFundingDraft((d) => ({ ...d, date: e.target.value }))} placeholder="2026-05" />
+            </label>
+            <label>
+              金额
+              <input value={fundingDraft.amount} onChange={(e) => setFundingDraft((d) => ({ ...d, amount: e.target.value }))} placeholder="3" />
+            </label>
+            <label>
+              金额单位
+              <select value={fundingDraft.amountUnit} onChange={(e) => setFundingDraft((d) => ({ ...d, amountUnit: e.target.value }))}>
+                <option value="亿">亿</option>
+                <option value="万">万</option>
+              </select>
+            </label>
+            <label>
+              币种
+              <select value={fundingDraft.currency} onChange={(e) => setFundingDraft((d) => ({ ...d, currency: e.target.value }))}>
+                {FUNDING_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label>
+              投资方（逗号分隔）
+              <input value={fundingDraft.investors} onChange={(e) => setFundingDraft((d) => ({ ...d, investors: e.target.value }))} placeholder="红杉, 高瓴" />
+            </label>
+            <label>
+              估值
+              <input value={fundingDraft.valuation} onChange={(e) => setFundingDraft((d) => ({ ...d, valuation: e.target.value }))} placeholder="10 亿" />
+            </label>
+            <label>
+              来源
+              <input value={fundingDraft.source} onChange={(e) => setFundingDraft((d) => ({ ...d, source: e.target.value }))} placeholder="企查查 / 36氪" />
+            </label>
+            <label>
+              备注
+              <input value={fundingDraft.note} onChange={(e) => setFundingDraft((d) => ({ ...d, note: e.target.value }))} placeholder="领投方 / 老股东跟投" />
+            </label>
+          </div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button
+              className="mini primary"
+              disabled={patchM.isPending || !fundingDraft.round}
+              onClick={() => {
+                const r = {
+                  id: `fund-${Date.now()}`,
+                  round: fundingDraft.round,
+                  date: fundingDraft.date.trim(),
+                  amount: fundingDraft.amount ? Number(fundingDraft.amount) : undefined,
+                  amountUnit: fundingDraft.amountUnit,
+                  currency: fundingDraft.currency,
+                  investors: fundingDraft.investors ? fundingDraft.investors.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : [],
+                  valuation: fundingDraft.valuation.trim(),
+                  source: fundingDraft.source.trim(),
+                  note: fundingDraft.note.trim(),
+                };
+                patchM.mutate({ fundingRounds: [...(intel.fundingRounds || []), r] });
+                setFundingDraft({ round: '', date: '', amount: '', amountUnit: '亿', currency: 'CNY', investors: '', valuation: '', source: '', note: '' });
+              }}
+            >
+              添加融资轮次
+            </button>
+          </div>
+        </details>
+      </section>
 
       {/* 调研条目，按维度分组 */}
       <section className="detail-section">
