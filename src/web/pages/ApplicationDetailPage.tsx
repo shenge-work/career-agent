@@ -2,12 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/ConfirmModal';
+import SourceBadge from '../components/SourceBadge';
 import {
   api,
   del,
   fmtTime,
   post,
   put,
+  type ActionResult,
   type ApplicationEvent,
   type ApplicationItem,
   type CompanyItem,
@@ -168,7 +170,7 @@ export default function ApplicationDetailPage() {
   });
 
   const pitchM = useMutation({
-    mutationFn: () => post<GenPitchResult>('/agent/gen-pitch', { applicationId: id, jdText: jdText.trim() }),
+    mutationFn: () => post<ActionResult<GenPitchResult>>('/agent/gen-pitch', { applicationId: id, jdText: jdText.trim() }),
     onSuccess: () => {
       setPitchError('');
       setCopied(null);
@@ -222,7 +224,16 @@ export default function ApplicationDetailPage() {
     coverLetter?: string;
     generatedAt?: number;
     model?: string | null;
+    basedOn?: string;
     degraded?: boolean;
+    history?: Array<{
+      greeting?: string;
+      coverLetter?: string;
+      generatedAt?: number | null;
+      model?: string | null;
+      basedOn?: string;
+      degraded?: boolean;
+    }>;
   } | undefined;
 
   async function copy(text: string, kind: 'greeting' | 'coverLetter') {
@@ -399,9 +410,12 @@ export default function ApplicationDetailPage() {
 
           {pitch ? (
             <div className="pitch-box">
-              {pitch.degraded && (
-                <p className="muted small">当前为模板话术（未配置 AI 模型）。配置 AI 后可生成更精准的针对性话术。</p>
-              )}
+              <div className="btn-row" style={{ marginBottom: 8 }}>
+                <SourceBadge source={pitch.degraded ? 'fallback' : 'ai'} />
+                {pitch.degraded && (
+                  <span className="muted small">当前为模板话术，配置 AI 后可生成更精准的针对性话术。</span>
+                )}
+              </div>
               <div className="pitch-field">
                 <div className="pitch-field-head">
                   <span className="pitch-label">打招呼话术</span>
@@ -424,6 +438,9 @@ export default function ApplicationDetailPage() {
                 {pitch.generatedAt ? `生成于 ${fmtTime(pitch.generatedAt)}` : ''}
                 {pitch.model ? ` · ${pitch.model}` : ''}
               </div>
+              {pitch.history && pitch.history.length > 0 && (
+                <p className="muted small">已保留 {pitch.history.length} 条历史版本，可随时「重新生成」。</p>
+              )}
             </div>
           ) : (
             <p className="muted small">尚未生成话术，点击上方按钮开始。</p>
@@ -560,7 +577,7 @@ function InterviewNotes({ app }: { app: ApplicationItem }) {
   });
 
   const reviewM = useMutation({
-    mutationFn: (noteId: string) => post<ReviewInterviewResult>('/agent/review-interview', { noteId }),
+    mutationFn: (noteId: string) => post<ActionResult<ReviewInterviewResult>>('/agent/review-interview', { noteId }),
     onSuccess: () => {
       setNoteError('');
       qc.invalidateQueries({ queryKey: ['interview-notes', app.id] });
@@ -618,9 +635,12 @@ function InterviewNotes({ app }: { app: ApplicationItem }) {
 
             {review && (
               <div className="review-box">
-                {review.degraded && (
-                  <p className="muted small">当前为模板复盘（未配置 AI 模型）。</p>
-                )}
+                <div className="btn-row" style={{ marginBottom: 8 }}>
+                  <SourceBadge source={review.degraded ? 'fallback' : 'ai'} />
+                  {review.degraded && (
+                    <span className="muted small">当前为模板复盘，配置 AI 后可生成更深入的分析。</span>
+                  )}
+                </div>
                 <p className="review-summary">{review.summary}</p>
                 {review.strengths && review.strengths.length > 0 && (
                   <div className="review-group">

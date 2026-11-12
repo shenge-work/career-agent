@@ -639,6 +639,7 @@ button.ghost:hover { background: var(--surface-2); }
   background: var(--bg);
   flex: none;
 }
+.topbar-ai { display: flex; align-items: center; gap: 8px; }
 .content-body {
   flex: 1;
   min-width: 0;
@@ -893,6 +894,19 @@ textarea.json-editor { font-size: 12px; line-height: 1.6; resize: vertical; }
 }
 .save-state.saving, .save-state.editing { border-color: var(--muted); color: var(--text); }
 .save-state.error { border-color: var(--danger); color: var(--danger); background: var(--surface-2); }
+
+/* 自动保存状态条三段（状态 / 最近保存时间 / 重试）：追加规则，不覆盖上面的原值 */
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.save-state.saved, .save-state.idle { color: var(--muted); }
+.save-state__time { font-size: 11px; opacity: .75; }
+.save-state__retry { padding: 1px 8px; font-size: 11px; }
+/* 保存错误独立槽：复用 .alert，与导出 / JSON / 主题错误并存 */
+.save-error-line { display: flex; align-items: center; justify-content: space-between; }
 a.mini {
   display: inline-block;
   padding: 4px 9px;
@@ -3110,3 +3124,478 @@ button.co-card.compare-pick.picked {
 .compare-company:hover {
   text-decoration: underline;
 }
+
+/* ------------------------------------------------- AI 模型配置（账号与设置） */
+
+/* 区块①：状态横幅 */
+.ai-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  margin-bottom: 14px;
+}
+.ai-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ai-banner-provider {
+  font-weight: 500;
+  color: var(--text);
+}
+.ai-banner-model {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-banner-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 区块②：三步配置向导 */
+.ai-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ai-step {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ai-step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ai-step-num {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+.ai-step-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.ai-step-head .muted {
+  margin-left: auto;
+}
+
+/* 区块③：操作与能力探活 */
+.ai-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 14px;
+}
+.ai-capabilities {
+  margin-bottom: 8px;
+}
+
+/* apiKey 显隐切换 */
+.ai-key-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-key-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+.ai-key-toggle {
+  flex: 0 0 auto;
+}
+
+/* 模型可搜索下拉 */
+.model-picker {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+.model-picker > input {
+  flex: 1;
+  min-width: 0;
+}
+.model-picker-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 30;
+}
+.model-picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.model-picker-item:hover {
+  background: var(--surface-3);
+}
+.model-picker-item.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.model-picker-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 危险操作隔离区 */
+.ai-danger {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid rgba(var(--_coral), 0.35);
+  border-radius: 12px;
+  background: rgba(var(--_coral), 0.06);
+}
+
+.faint { color: var(--faint); }
+
+/* V2：服务商卡片网格 */
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.ai-provider-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.ai-provider-card:hover {
+  border-color: var(--accent);
+}
+.ai-provider-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  background: var(--accent-soft);
+}
+.ai-provider-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ai-provider-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ai-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.ai-provider-card.selected .ai-tag {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* V2：换预设覆盖确认 */
+.ai-preset-confirm {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--_amber), 0.4);
+  border-radius: 10px;
+  background: rgba(var(--_amber), 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* V3：用量 7 天迷你柱状图 */
+.ai-usage-chart {
+  margin-top: 12px;
+}
+.ai-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 120px;
+  padding: 8px 0;
+}
+.ai-chart-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ai-chart-stack {
+  flex: 1;
+  width: 100%;
+  max-width: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.ai-chart-bar {
+  width: 100%;
+  border-radius: 3px;
+  min-height: 2px;
+}
+.ai-bar-ok {
+  background: var(--success);
+}
+.ai-bar-err {
+  background: var(--danger);
+}
+.ai-chart-label {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ai-chart-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* V4：多厂商并存 —— 已配置卡片网格 */
+.ai-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 20px 0 8px;
+}
+.ai-provider-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+.ai-provider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: default;
+}
+.ai-provider-item:not(.is-active):hover {
+  border-color: var(--accent);
+}
+.ai-provider-item.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ai-provider-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ai-provider-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.ai-provider-item .kv {
+  grid-template-columns: 72px minmax(0, 1fr);
+  margin: 0;
+}
+.ai-provider-item .kv > span {
+  overflow-wrap: anywhere;
+}
+.ai-test-fail {
+  border-color: rgba(var(--_coral), 0.4);
+  background: rgba(var(--_coral), 0.08);
+}
+
+/* 添加弹窗里已配置的预设：置灰并标「已配置」 */
+.ai-provider-card.configured {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ai-provider-card.configured:hover {
+  border-color: var(--border);
+}
+
+/* 弹窗：新增 / 编辑服务商 */
+.ai-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 60;
+}
+.ai-modal {
+  width: min(680px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  padding: 18px;
+}
+.ai-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ai-modal .ai-provider-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+.ai-modal .form-grid {
+  margin-bottom: 8px;
+}
+.ai-modal .ai-actions {
+  margin: 14px 0 0;
+}
+
+/* ===== 用量统计页（#/usage，0020）===== */
+.usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+/* 账号设置里内容区偏窄，固定 3 列让 6 张概览卡整齐 3×2 排列，避免最后一张孤行。 */
+.settings-content .usage-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.usage-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.usage-metric-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.usage-metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.usage-metric-value.tone-red {
+  color: rgba(var(--_coral), 1);
+}
+.usage-metric-value.tone-amber {
+  color: rgba(var(--_amber), 1);
+}
+.usage-metric-value.tone-green {
+  color: rgba(var(--_teal), 1);
+}
+
+.usage-table-wrap {
+  overflow-x: auto;
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.usage-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.usage-table th.num {
+  text-align: right;
+}
+.usage-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.usage-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.usage-table tr:last-child td {
+  border-bottom: none;
+}
+.usage-table td.tone-red {
+  color: rgba(var(--_coral), 1);
+}
+
+.usage-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 80px;
+}
+.usage-bar-fill {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  min-width: 2px;
+  display: inline-block;
+}
+.usage-bar-text {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+

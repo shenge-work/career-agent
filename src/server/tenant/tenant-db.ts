@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, ilike, isNull, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, gt, ilike, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { DB_TOKEN } from '../../shared/constants';
 import type { Database } from '../db/client';
 import {
   aiConfigs,
   aiUsage,
+  aiUsageEvents,
   applicationEvents,
   applications,
   attachments,
@@ -1310,8 +1311,24 @@ export class TenantDb {
 
       // ---------------------------------------------------------- AI 配置
       // 与所有业务表一致：这里没有任何不带 userId 的查询方法，apiKey 只在本层可见。
+      // P0-6 起支持多厂商并存：一个账号多行 (user_id, provider)，is_active 标记生效厂商。
+      getAiConfigs: () =>
+        db.select().from(aiConfigs).where(eq(aiConfigs.userId, userId)),
+
+      getActiveAiConfig: () =>
+        db
+          .select()
+          .from(aiConfigs)
+          .where(and(eq(aiConfigs.userId, userId), eq(aiConfigs.isActive, true)))
+          .limit(1),
+
+      // 向后兼容旧调用（business.service.analyzeInterview）：语义收窄为「当前生效配置」。
       getAiConfig: () =>
-        db.select().from(aiConfigs).where(eq(aiConfigs.userId, userId)).limit(1),
+        db
+          .select()
+          .from(aiConfigs)
+          .where(and(eq(aiConfigs.userId, userId), eq(aiConfigs.isActive, true)))
+          .limit(1),
 
       upsertAiConfig: (input: {
         provider: string;
@@ -1320,23 +1337,65 @@ export class TenantDb {
         models: Record<string, string>;
         temperature: number;
         timeoutMs: number;
+        isActive?: boolean;
       }) =>
         db
           .insert(aiConfigs)
           .values({ userId, ...input })
           .onConflictDoUpdate({
-            target: aiConfigs.userId,
+            target: [aiConfigs.userId, aiConfigs.provider],
             set: { ...input, updatedAt: new Date() },
           })
           .returning(),
 
+      /** 单事务内先清空该账号的生效标记，再把目标厂商置为生效（保证唯一索引不冲突）。 */
+      setActiveProvider: (provider: string) =>
+        db.transaction(async (tx) => {
+          await tx
+            .update(aiConfigs)
+            .set({ isActive: false })
+            .where(eq(aiConfigs.userId, userId));
+          await tx
+            .update(aiConfigs)
+            .set({ isActive: true })
+            .where(and(eq(aiConfigs.userId, userId), eq(aiConfigs.provider, provider)));
+        }),
+
+      deleteAiConfig: (provider: string) =>
+        db
+          .delete(aiConfigs)
+          .where(and(eq(aiConfigs.userId, userId), eq(aiConfigs.provider, provider))),
+
       listAiUsage: () =>
         db.select().from(aiUsage).where(eq(aiUsage.userId, userId)).orderBy(desc(aiUsage.day)),
 
-      /** 按 (user_id, 本地日期) 累计；失败请求也计入 requests，另累计 errors。 */
-      bumpAiUsage: (opts: { error?: boolean; model?: string | null }) => {
+      /**
+       * 按 (user_id, 本地日期) 累计：失败请求也计入 requests，另累计 errors。
+       * 新增维度字段只在 on conflict 时覆盖为「最近一次调用」的最新值（与 last_model 一致）。
+       * 隐私铁律：只落元数据，绝不落 prompt 与响应正文。
+       */
+      bumpAiUsage: (opts: {
+        action?: string | null;
+        model?: string | null;
+        provider?: string | null;
+        status?: 'ok' | 'error' | null;
+        errorCode?: string | null;
+        latencyMs?: number | null;
+        tokens?: { promptTokens?: number | null; completionTokens?: number | null } | null;
+      }) => {
         const day = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD（本地时区）
-        const err = opts.error ? 1 : 0;
+        const err = opts.status === 'error' ? 1 : 0;
+        const meta = {
+          lastAt: new Date(),
+          lastModel: opts.model ?? null,
+          provider: opts.provider ?? null,
+          action: opts.action ?? null,
+          status: opts.status ?? null,
+          errorCode: opts.errorCode ?? null,
+          latencyMs: opts.latencyMs ?? null,
+          promptTokens: opts.tokens?.promptTokens ?? null,
+          completionTokens: opts.tokens?.completionTokens ?? null,
+        };
         return db
           .insert(aiUsage)
           .values({
@@ -1344,19 +1403,56 @@ export class TenantDb {
             day,
             requests: 1,
             errors: err,
-            lastAt: new Date(),
-            lastModel: opts.model ?? null,
+            ...meta,
           })
           .onConflictDoUpdate({
             target: [aiUsage.userId, aiUsage.day],
             set: {
               requests: sql`${aiUsage.requests} + 1`,
               errors: sql`${aiUsage.errors} + ${err}`,
-              lastAt: new Date(),
-              lastModel: opts.model ?? null,
+              ...meta,
             },
           })
           .returning();
+      },
+
+      /**
+       * 0020 · 每次 AI 调用追加一条明细（append-only，永不更新），供厂商/模型对账。
+       * 与 bumpAiUsage 并行调用：后者供趋势图，本方法供对账明细。隐私铁律：只落元数据。
+       */
+      insertAiUsageEvent: (opts: {
+        provider?: string | null;
+        model?: string | null;
+        action?: string | null;
+        status?: 'ok' | 'error' | null;
+        errorCode?: string | null;
+        latencyMs?: number | null;
+        tokens?: { promptTokens?: number | null; completionTokens?: number | null } | null;
+      }) =>
+        db.insert(aiUsageEvents).values({
+          userId,
+          provider: opts.provider ?? null,
+          model: opts.model ?? null,
+          action: opts.action ?? null,
+          status: opts.status ?? null,
+          errorCode: opts.errorCode ?? null,
+          latencyMs: opts.latencyMs ?? null,
+          promptTokens: opts.tokens?.promptTokens ?? null,
+          completionTokens: opts.tokens?.completionTokens ?? null,
+        }),
+
+      /**
+       * 0020 · 按时间范围读明细，供 /api/ai/usage 对账。返回倒序明细行（最新在前）。
+       * since 为可选的时间下界（含），不传则全量。
+       */
+      listAiUsageEvents: (since?: Date | null) => {
+        const conds = [eq(aiUsageEvents.userId, userId)];
+        if (since) conds.push(gte(aiUsageEvents.createdAt, since));
+        return db
+          .select()
+          .from(aiUsageEvents)
+          .where(and(...conds))
+          .orderBy(desc(aiUsageEvents.createdAt));
       },
     };
   }

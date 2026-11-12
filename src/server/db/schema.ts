@@ -9,6 +9,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -548,21 +549,36 @@ export const settings = pgTable('settings', {
  * api_key 只留在服务端数据库里，任何 GET 接口都不回传明文（只给 hasApiKey）。
  * 未配置时服务会只读回退到 v1 的 ai.config.json，方便老用户零配置过渡。
  */
-export const aiConfigs = pgTable('ai_configs', {
-  userId: uuid('user_id')
-    .primaryKey()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  provider: text('provider').notNull().default('openai-compatible'),
-  baseUrl: text('base_url').notNull(),
-  apiKey: text('api_key').notNull().default(''),
-  models: jsonb('models').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
-  temperature: real('temperature').notNull().default(0.4),
-  timeoutMs: integer('timeout_ms').notNull().default(60000),
-  updatedAt: updatedAt(),
-  ...syncCols(),
-});
+export const aiConfigs = pgTable(
+  'ai_configs',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull().default('openai-compatible'),
+    baseUrl: text('base_url').notNull(),
+    apiKey: text('api_key').notNull().default(''),
+    models: jsonb('models').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    temperature: real('temperature').notNull().default(0.4),
+    timeoutMs: integer('timeout_ms').notNull().default(60000),
+    isActive: boolean('is_active').notNull().default(false),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.provider] }),
+    uniqueIndex('ai_configs_one_active_idx').on(t.userId).where(sql`${t.isActive}`),
+  ]
+);
 
-/** P2b · AI 用量按账号 + 自然日累计（内测需要知道谁在用、用了多少次）。 */
+/**
+ * P2b · AI 用量按账号 + 自然日累计（内测需要知道谁在用、用了多少次）。
+ *
+ * P0-5 观测字段扩展：requests/errors 仍按 (user_id, day) 聚合；以下新增列
+ * 记录「当日最近一次调用」的维度元数据（provider/action/status/errorCode/latencyMs/
+ * promptTokens/completionTokens），与 last_model 语义一致，不参与聚合。
+ * 隐私铁律：只落元数据，绝不落 prompt 与响应正文。
+ */
 export const aiUsage = pgTable(
   'ai_usage',
   {
@@ -574,8 +590,44 @@ export const aiUsage = pgTable(
     errors: integer('errors').notNull().default(0),
     lastAt: timestamp('last_at', { withTimezone: true }),
     lastModel: text('last_model'),
+    provider: text('provider'),
+    action: text('action'),
+    status: text('status'),
+    errorCode: text('error_code'),
+    latencyMs: integer('latency_ms'),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
   },
   (t) => [primaryKey({ columns: [t.userId, t.day] })]
+);
+
+/**
+ * 0020 · AI 用量明细事件表（按次 append-only，厂商/模型对账的权威事实源）。
+ * 每行 = 一次 AI 调用（含探活）；ai_usage 继续按天聚合供趋势图，本表不参与聚合、永不更新。
+ * 隐私铁律：只落元数据，绝不落 prompt 与响应正文。
+ */
+export const aiUsageEvents = pgTable(
+  'ai_usage_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider'),
+    model: text('model'),
+    action: text('action'),
+    status: text('status'),
+    errorCode: text('error_code'),
+    latencyMs: integer('latency_ms'),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('ai_usage_events_user_time_idx').on(t.userId, t.createdAt.desc()),
+    index('ai_usage_events_user_provider_idx').on(t.userId, t.provider),
+    index('ai_usage_events_user_model_idx').on(t.userId, t.model),
+  ]
 );
 
 /**
@@ -831,6 +883,7 @@ export const schema = {
   settings,
   aiConfigs,
   aiUsage,
+  aiUsageEvents,
   syncState,
   practiceSessions,
   practiceQuestions,
@@ -858,3 +911,4 @@ export type PracticeAnswerRow = typeof practiceAnswers.$inferSelect;
 export type PracticeEvaluationRow = typeof practiceEvaluations.$inferSelect;
 export type PracticeWeaknessRow = typeof practiceWeaknesses.$inferSelect;
 export type SnippetRow = typeof snippets.$inferSelect;
+export type AiUsageEventRow = typeof aiUsageEvents.$inferSelect;

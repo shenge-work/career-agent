@@ -1,0 +1,81 @@
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant E as Editor.tsx
+    participant C as AutosaveController
+    participant T as transport = put()
+    participant S as PUT /api/resumes/:id
+    participant Q as QueryClient
+    participant CM as ConfirmModal
+    participant F as bestEffortFlush
+    participant B as window.beforeunload
+    participant N as useNavigate
+
+    U->>E: 修改字段 onSet → setDraft
+    E->>E: draftRef.current = draft
+    E->>C: touch(draft1)
+    C->>E: onChange(view: status=editing, dirty=true)
+    E->>U: 状态条「有未保存改动」
+    Note over E: 800ms 防抖
+    E->>C: commit()
+    C->>C: pump(): seq=1, inflight=true, status=saving
+    C->>T: transport(payload1, 1)
+    T->>S: PUT { payload }（契约不变）
+    C->>E: onChange(view: status=saving)
+    E->>U: 状态条「保存中…」（脏态注册 beforeunload）
+    U->>E: 防抖窗口内继续输入 setDraft(draft2)
+    E->>C: touch(draft2) → pending 覆盖为最新（不发请求）
+    alt 服务端全部成功
+        S-->>T: 200 ResumeItem
+        T-->>C: resolve(1)
+        C->>C: isStale(1)=false → baseline=canonical(payload1)
+        C->>C: pending 非空 → drained=false（不刷预览）→ pump() seq=2
+        C->>T: transport(payload2, 2)
+        T->>S: PUT { payload }
+        S-->>T: 200
+        T-->>C: resolve(2)
+        C->>C: baseline=canonical(payload2), pending 空 → drained=true
+        C->>E: onDrained()
+        E->>E: setPreviewKey(k=>k+1)（恰好一次）
+        E->>Q: invalidateQueries(['resumes'])
+        C->>E: onChange(status=saved, lastSavedAt=now, dirty=false)
+        E->>U: 「已保存 · 最近保存于 HH:mm:ss」
+        E->>E: dirty=false → beforeunload cleanup 解绑
+    else 最新请求 500
+        S-->>T: 500
+        T-->>C: reject(Error)
+        C->>C: status=error, saveError=message, 保留 pending
+        C->>E: onChange(view: status=error)
+        E->>U: 「保存失败」+ 独立 .alert 原因 + 「重试」按钮
+    end
+
+    U->>E: 点「重试」（error 态）
+    E->>C: retry(draftRef.current)
+    C->>C: pending=最新 draft; saveError=''; commit() seq++
+    C->>E: onChange(status=saving)
+    Note right of C: 成功 → drained → 「已保存」+ 重试按钮消失
+
+    U->>E: 脏状态点「← 简历库」
+    E->>E: handleBack: dirty → e.preventDefault(); setLeaveOpen(true)
+    E->>CM: 打开（继续编辑 / 立即保存并离开 / 直接离开）
+    U->>CM: 「立即保存并离开」
+    CM->>E: onExtra; busy=true
+    E->>C: await flushAndWait(draftRef.current)
+    C->>C: 等待 inflight 排空 + pending 落库；永不 reject
+    C-->>E: resolve（失败则 view.saveError 有值）
+    alt saveError 为空
+        E->>N: navigate('/resumes')
+    else 保存失败
+        E->>CM: busy=false，保持弹窗不跳走
+        E->>E: 独立 .alert 写入原因
+    end
+
+    U->>B: 脏状态刷新 / 关闭标签
+    B->>E: beforeunload
+    E->>B: e.preventDefault(); e.returnValue=''（原生确认）
+    E->>F: bestEffortFlush(id, payload)
+    alt bytes <= 48KiB
+        F->>F: fetch PUT keepalive（尽力）
+    else bytes > 48KiB 或 fetch reject
+        F->>E: pushSaveError('内容较大，无法自动保存；请点击状态条「重试」…') + 硬拦截
+    end

@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDb } from '../tenant/tenant-db';
 import { AiService, AiProxyError } from '../ai/ai.service';
+import type { AiError } from '../ai/ai-errors';
 import {
   buildGenPitchMessages,
   buildKbAskMessages,
@@ -20,8 +21,30 @@ import { analyze, extractTerms } from '../business/jd.service';
 
 type Json = Record<string, unknown>;
 
+/** 动作结果来源标记（P1-1）：ai=大模型成功，fallback=未配置降级，error=AI 失败降级。 */
+export type AiActionSource = 'ai' | 'fallback' | 'error';
+
+/** 动作结果统一结构：data 承载原有字段，source/meta 提供来源与耗时/降级原因/错误。 */
+export interface ActionResult<T> {
+  source: AiActionSource;
+  data: T;
+  meta?: { model?: string | null; latencyMs?: number; fallbackReason?: string; error?: AiError };
+}
+
 function obj(v: unknown): Json {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {};
+}
+
+function toAiError(e: unknown): AiError {
+  if (e instanceof AiProxyError) {
+    return { code: e.code, message: e.message, status: e.status, retryable: e.retryable, retryAfterMs: e.retryAfterMs };
+  }
+  return { code: 'UPSTREAM_ERROR', message: (e as any)?.message || String(e), retryable: false };
+}
+
+/** 上游 400 且错误里提到 response_format → 该模型不支持强制 JSON，需降级重试一次。 */
+function isResponseFormatBadRequest(e: unknown): boolean {
+  return e instanceof AiProxyError && e.code === 'BAD_REQUEST' && /response_format/i.test(e.message);
 }
 
 /**
@@ -30,6 +53,7 @@ function obj(v: unknown): Json {
  * 每个动作有明确的输入/输出契约，system prompt 由服务端按场景组装，
  * 前端不直接拼 prompt（防注入 + 保质量）。所有大模型调用复用 AiService，
  * 用量统计 / Key 隔离 / SSRF 防护自动继承；未配置 AI 时走规则/模板降级。
+ * P1-1 起统一返回 ActionResult<T>：data 保留原有字段，source/meta 标记来源。
  */
 @Injectable()
 export class AgentService {
@@ -72,6 +96,36 @@ export class AgentService {
     return '';
   }
 
+  /** 把动作失败归类为 fallback（未配置）或 error（AI 失败但已降级）。 */
+  private outcome(e: unknown): { source: AiActionSource; fallbackReason?: string; error?: AiError } {
+    if (e instanceof AiProxyError && e.code === 'INVALID_CONFIG') {
+      return { source: 'fallback', fallbackReason: 'AI 未配置，已使用规则 / 模板结果' };
+    }
+    return { source: 'error', fallbackReason: 'AI 调用失败，已降级为规则 / 模板结果', error: toAiError(e) };
+  }
+
+  /** 强制 JSON 补全：首次带 response_format=json_object；不支持则去字段重试一次（P0-3）。 */
+  private async completeJson(
+    userId: string,
+    messages: Array<{ role: string; content: string }>,
+    action: string,
+    opts: { temperature?: number; model?: string } = {}
+  ) {
+    const base = { messages, action, ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) };
+    try {
+      return await this.ai.complete(userId, { ...base, ...(opts.model ? { model: opts.model } : {}), responseFormat: 'json_object' });
+    } catch (e) {
+      if (isResponseFormatBadRequest(e)) {
+        return await this.ai.complete(userId, {
+          ...base,
+          ...(opts.model ? { model: opts.model } : {}),
+          responseFormat: null,
+        });
+      }
+      throw e;
+    }
+  }
+
   /**
    * 动作 1：JD 结构化解析（规则 + 大模型混合）。
    *   · 规则层永远先跑（extractTerms + analyze），作为可解释基线；
@@ -96,24 +150,30 @@ export class AgentService {
     let parsed: ParsedJd | null = null;
     let aiUsed = false;
     let model: string | null = null;
+    let latencyMs: number | undefined;
+    let source: AiActionSource = 'fallback';
+    let fallbackReason: string | undefined;
+    let error: AiError | undefined;
 
     try {
-      const res = await this.ai.complete(userId, {
-        messages: buildParseJdMessages(jdText, ruleKeywords),
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-      });
+      const res = await this.completeJson(userId, buildParseJdMessages(jdText, ruleKeywords), 'parseJd', { temperature: 0.1 });
+      latencyMs = res.latencyMs;
       const got = parseJsonLoose<ParsedJd>(res.text);
       if (got) {
         parsed = normalizeParsedJd(got);
         aiUsed = true;
         model = res.model;
+        source = 'ai';
+      } else {
+        source = 'error';
+        fallbackReason = 'AI 未返回可解析的 JSON，已使用规则结果';
       }
     } catch (e) {
       // AI 未配置或调用失败 → 降级规则层，不阻断主流程（N12 §3.4）。
-      if (e instanceof AiProxyError && e.status !== 400) {
-        // 非「未配置」的失败也降级，但保留提示；400 直接走 fallback。
-      }
+      const o = this.outcome(e);
+      source = o.source;
+      fallbackReason = o.fallbackReason;
+      error = o.error;
       aiUsed = false;
       parsed = null;
     }
@@ -121,24 +181,28 @@ export class AgentService {
     if (!parsed) parsed = fallbackParseJd(jdText, ruleKeywords);
 
     return {
-      jdText,
-      parsed,
-      aiUsed,
-      model,
-      degraded: !aiUsed,
-      rule: {
-        keywords: ruleKeywords.slice(0, 40),
-        termCount: ruleTerms.length,
-        match: matchResult,
+      source,
+      data: {
+        jdText,
+        parsed,
+        aiUsed,
+        model,
+        degraded: !aiUsed,
+        rule: {
+          keywords: ruleKeywords.slice(0, 40),
+          termCount: ruleTerms.length,
+          match: matchResult,
+        },
       },
-    };
+      meta: { model, latencyMs, fallbackReason, error },
+    } satisfies ActionResult<Record<string, unknown>>;
   }
 
   /**
    * 动作 2：生成投递话术（大模型 + 模板降级）。
    *   · 读岗位（applications）聚合根，拿 JD + 关联简历 + 公司；
    *   · 大模型基于真实简历片段生成 greeting / coverLetter；
-   *   · 生成结果写回 applications.payload.pitch，与岗位绑定、可重生成。
+   *   · 生成结果写回 applications.payload.pitch，并保留 pitch.history（本地最多 5 条）。
    */
   async genPitch(userId: string, applicationId: string, input: { jdText?: unknown }) {
     const app = await this.requireApplication(userId, applicationId);
@@ -176,13 +240,14 @@ export class AgentService {
     let result: { greeting: string; coverLetter: string; fallback?: boolean } | null = null;
     let aiUsed = false;
     let model: string | null = null;
+    let latencyMs: number | undefined;
+    let source: AiActionSource = 'fallback';
+    let fallbackReason: string | undefined;
+    let error: AiError | undefined;
 
     try {
-      const res = await this.ai.complete(userId, {
-        messages: buildGenPitchMessages({ jdText, jdParsed: parsed, resume: snippet, company }),
-        temperature: 0.6,
-        response_format: { type: 'json_object' },
-      });
+      const res = await this.completeJson(userId, buildGenPitchMessages({ jdText, jdParsed: parsed, resume: snippet, company }), 'genPitch', { temperature: 0.6 });
+      latencyMs = res.latencyMs;
       const got = parseJsonLoose<{ greeting: string; coverLetter: string }>(res.text);
       if (got && (typeof got.greeting === 'string' || typeof got.coverLetter === 'string')) {
         result = {
@@ -191,13 +256,35 @@ export class AgentService {
         };
         aiUsed = true;
         model = res.model;
+        source = 'ai';
+      } else {
+        source = 'error';
+        fallbackReason = 'AI 未返回可解析的 JSON，已使用模板话术';
       }
-    } catch {
+    } catch (e) {
+      const o = this.outcome(e);
+      source = o.source;
+      fallbackReason = o.fallbackReason;
+      error = o.error;
       aiUsed = false;
       result = null;
     }
 
     if (!result) result = fallbackPitch({ jdParsed: parsed, ruleKeywords });
+
+    // 保留历史版本：把上一版 pitch 压入 history（本地最多 5 条），支持「重新生成」回溯。
+    const prevPitch = obj(payload.pitch);
+    const prevHistory = Array.isArray(prevPitch.history) ? (prevPitch.history as Json[]) : [];
+    if (typeof prevPitch.greeting === 'string' || typeof prevPitch.coverLetter === 'string') {
+      prevHistory.unshift({
+        greeting: typeof prevPitch.greeting === 'string' ? prevPitch.greeting : '',
+        coverLetter: typeof prevPitch.coverLetter === 'string' ? prevPitch.coverLetter : '',
+        generatedAt: typeof prevPitch.generatedAt === 'number' ? prevPitch.generatedAt : null,
+        model: typeof prevPitch.model === 'string' ? prevPitch.model : null,
+        basedOn: typeof prevPitch.basedOn === 'string' ? prevPitch.basedOn : 'resume',
+        degraded: !!prevPitch.degraded,
+      });
+    }
 
     const pitch = {
       greeting: result.greeting,
@@ -206,6 +293,7 @@ export class AgentService {
       model: model ?? null,
       basedOn: 'resume',
       degraded: !aiUsed,
+      history: prevHistory.slice(0, 5),
     };
 
     // 写回岗位 payload（保留其它字段，只合并 pitch）。
@@ -213,7 +301,11 @@ export class AgentService {
     const rows = await this.t(userId).updateApplication(applicationId, { payload: nextPayload });
     if (!rows.length) throw new NotFoundException('岗位不存在');
 
-    return { ...rows[0], pitch };
+    return {
+      source,
+      data: { ...rows[0], pitch },
+      meta: { model, latencyMs, fallbackReason, error },
+    } satisfies ActionResult<Record<string, unknown>>;
   }
 
   /**
@@ -239,25 +331,39 @@ export class AgentService {
     let review: InterviewReview | null = null;
     let aiUsed = false;
     let model: string | null = null;
+    let latencyMs: number | undefined;
+    let source: AiActionSource = 'fallback';
+    let fallbackReason: string | undefined;
+    let error: AiError | undefined;
 
     try {
-      const res = await this.ai.complete(userId, {
-        messages: buildReviewInterviewMessages({
+      const res = await this.completeJson(
+        userId,
+        buildReviewInterviewMessages({
           company: note.company,
           position: note.position,
           round: note.round,
           transcript,
         }),
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-      });
+        'reviewInterview',
+        { temperature: 0.4 }
+      );
+      latencyMs = res.latencyMs;
       const got = parseJsonLoose<InterviewReview>(res.text);
       if (got && typeof got.summary === 'string') {
         review = normalizeReview(got);
         aiUsed = true;
         model = res.model;
+        source = 'ai';
+      } else {
+        source = 'error';
+        fallbackReason = 'AI 未返回可解析的 JSON，已使用模板复盘';
       }
-    } catch {
+    } catch (e) {
+      const o = this.outcome(e);
+      source = o.source;
+      fallbackReason = o.fallbackReason;
+      error = o.error;
       aiUsed = false;
       review = null;
     }
@@ -276,7 +382,11 @@ export class AgentService {
     const updated = await this.t(userId).updateInterviewNote(noteId, { payload: nextPayload });
     if (!updated.length) throw new NotFoundException('面试记录不存在');
 
-    return { ...updated[0], aiReview };
+    return {
+      source,
+      data: { ...updated[0], aiReview },
+      meta: { model, latencyMs, fallbackReason, error },
+    } satisfies ActionResult<Record<string, unknown>>;
   }
 
   /**
@@ -299,20 +409,29 @@ export class AgentService {
     let answer: KbAskAnswer | null = null;
     let aiUsed = false;
     let model: string | null = null;
+    let latencyMs: number | undefined;
+    let source: AiActionSource = 'fallback';
+    let fallbackReason: string | undefined;
+    let error: AiError | undefined;
 
     try {
-      const res = await this.ai.complete(userId, {
-        messages: buildKbAskMessages({ question: q, passages }),
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-      });
+      const res = await this.completeJson(userId, buildKbAskMessages({ question: q, passages }), 'kbAsk', { temperature: 0.4 });
+      latencyMs = res.latencyMs;
       const got = parseJsonLoose<KbAskAnswer>(res.text);
       if (got && typeof got.answer === 'string') {
         answer = normalizeKbAsk(got);
         aiUsed = true;
         model = res.model;
+        source = 'ai';
+      } else {
+        source = 'error';
+        fallbackReason = 'AI 未返回可解析的 JSON，已返回知识库原文';
       }
-    } catch {
+    } catch (e) {
+      const o = this.outcome(e);
+      source = o.source;
+      fallbackReason = o.fallbackReason;
+      error = o.error;
       aiUsed = false;
       answer = null;
     }
@@ -320,13 +439,17 @@ export class AgentService {
     if (!answer) answer = fallbackKbAsk({ question: q, passages });
 
     return {
-      question: q,
-      ...answer,
-      aiUsed,
-      model,
-      degraded: !aiUsed,
-      hitCount: hits.length,
-    };
+      source,
+      data: {
+        question: q,
+        ...answer,
+        aiUsed,
+        model,
+        degraded: !aiUsed,
+        hitCount: hits.length,
+      },
+      meta: { model, latencyMs, fallbackReason, error },
+    } satisfies ActionResult<Record<string, unknown>>;
   }
 }
 

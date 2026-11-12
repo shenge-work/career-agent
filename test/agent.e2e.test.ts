@@ -148,11 +148,12 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     const res = await call('POST', '/api/agent/parse-jd', a, { jdText: JD_TEXT });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.aiUsed).toBe(false);
-    expect(j.degraded).toBe(true);
-    expect(j.parsed.position).toBeTruthy();
-    expect(j.rule.termCount).toBeGreaterThan(0);
-    expect(Array.isArray(j.rule.keywords)).toBe(true);
+    expect(j.source).toBe('fallback');
+    expect(j.data.aiUsed).toBe(false);
+    expect(j.data.degraded).toBe(true);
+    expect(j.data.parsed.position).toBeTruthy();
+    expect(j.data.rule.termCount).toBeGreaterThan(0);
+    expect(Array.isArray(j.data.rule.keywords)).toBe(true);
   });
 
   it('parse-jd：AI 已配置时返回结构化字段（position/requirements/keywords）', async () => {
@@ -162,10 +163,11 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     const res = await call('POST', '/api/agent/parse-jd', a, { jdText: JD_TEXT });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.aiUsed).toBe(true);
-    expect(j.parsed.position).toBe('高级前端工程师');
-    expect(j.parsed.requirements).toContain('精通 React');
-    expect(j.parsed.keywords).toContain('React');
+    expect(j.source).toBe('ai');
+    expect(j.data.aiUsed).toBe(true);
+    expect(j.data.parsed.position).toBe('高级前端工程师');
+    expect(j.data.parsed.requirements).toContain('精通 React');
+    expect(j.data.parsed.keywords).toContain('React');
   });
 
   it('parse-jd：上游 500 时降级规则层，不阻断主流程', async () => {
@@ -174,8 +176,9 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     mode = 'error';
     const res = await call('POST', '/api/agent/parse-jd', a, { jdText: JD_TEXT });
     expect(res.statusCode).toBe(200);
-    expect(res.json().aiUsed).toBe(false);
-    expect(res.json().degraded).toBe(true);
+    expect(res.json().source).toBe('error');
+    expect(res.json().data.aiUsed).toBe(false);
+    expect(res.json().data.degraded).toBe(true);
     mode = 'ok';
   });
 
@@ -204,15 +207,16 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     const res = await call('POST', '/api/agent/gen-pitch', b, { applicationId: appRow.id });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.pitch.greeting).toBeTruthy();
-    expect(j.pitch.coverLetter).toBeTruthy();
-    expect(j.pitch.basedOn).toBe('resume');
-    expect(j.pitch.degraded).toBe(true);
-    expect(j.pitch.generatedAt).toBeTypeOf('number');
+    expect(j.source).toBe('fallback');
+    expect(j.data.pitch.greeting).toBeTruthy();
+    expect(j.data.pitch.coverLetter).toBeTruthy();
+    expect(j.data.pitch.basedOn).toBe('resume');
+    expect(j.data.pitch.degraded).toBe(true);
+    expect(j.data.pitch.generatedAt).toBeTypeOf('number');
 
     // 落库可查
     const got = await call('GET', `/api/applications/${appRow.id}`, b);
-    expect(got.json().payload.pitch.greeting).toBe(j.pitch.greeting);
+    expect(got.json().payload.pitch.greeting).toBe(j.data.pitch.greeting);
   });
 
   it('gen-pitch：AI 已配置时生成话术，model 与 generatedAt 落库', async () => {
@@ -232,9 +236,10 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     const res = await call('POST', '/api/agent/gen-pitch', a, { applicationId: appRow.id });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.pitch.degraded).toBe(false);
-    expect(j.pitch.model).toBe('mock-fast');
-    expect(j.pitch.greeting).toContain('React');
+    expect(j.source).toBe('ai');
+    expect(j.data.pitch.degraded).toBe(false);
+    expect(j.data.pitch.model).toBe('mock-fast');
+    expect(j.data.pitch.greeting).toContain('React');
   });
 
   it('gen-pitch：跨用户 applicationId 返回 404，不泄露存在性', async () => {
@@ -283,6 +288,6 @@ describe('N12 S1 · Agent 编排层（parse-jd / gen-pitch）', () => {
     expect(res.statusCode).toBe(200);
     // 服务端用 system prompt 约束，mock 上游按「求职顾问」关键词返回固定话术，
     // 这里验证生成链路不受注入 JD 影响而崩溃，且话术仍来自 system 约束。
-    expect(res.json().pitch.greeting).toContain('React');
+    expect(res.json().data.pitch.greeting).toContain('React');
   });
 });

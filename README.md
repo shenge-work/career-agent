@@ -93,6 +93,21 @@ GET 永不回显；流式试用台；按账号统计用量。
 下载、软删除、同步增量预览。20MB 上限，字节按 sha256 内容寻址落在本地 `blobs/`，
 读取全程走会话鉴权，界面沿用黑白灰主题。
 
+**2026-11-10 ~ 11-12 增量（已落地，旧 ROADMAP「待补」清单多项已过时）**：
+
+- **岗位主线**（`#/applications`、`#/applications/:id`）：岗位 CRUD、6 态推进与 `application_events` 时间线、JD / 关联简历 / 投递话术 / 面试复盘；与 `#/tracker` 目前仍是两条并行链路（下一轮按「岗位聚合视图」收口，见迭代排期）。
+- **编辑器能力重建**：投递体检三级规则检查（完整性 / 量化 / 篇幅 / ATS / 敏感信息）、撤销重做、语义化表单 + 板块大纲导航、5 套主题可视化画廊、A4 预览 iframe 高度自适应与页数徽标、txt / md / doc + 矢量 / 图片双版 PDF 导出。**注意 `doc` 是 HTML 伪装 `.doc`，真 `.docx` OOXML 仍待做**。
+- **简历库**：缩略图 iframe 卡片网格、排序 / 分页、JD 解析与一键派生、版本历史与恢复、删除二次确认。
+- **AI 面试练习 N14**（`#/interview`、`#/interview/:sessionId`、`#/interview/growth`）：简历 + JD + 面经 + 复盘四源出题、有限动态追问、6 维 1–4 档 Rubric 可解释评分、反馈三件套、跨场次能力画像与弱项回流、同题前后对比、成长曲线；纯文本、无 Key 时本地题库降级；5 张 `practice_*` 表已接入云同步（`0016`）。
+- **STAR 经历素材库**（`#/snippets`）：跨简历复用片段、一键插入为高亮卡（`0017`）。
+- **公司档案第二批**：公司情报卡、多公司横向对比（`#/companies/compare`）、简报价签图；D7 图片相册 / PNG 简报仍待做。
+- **作品集 / 官网导出**（`#/portfolio`）：模板、内容字段、iframe 预览、一键发布 GitHub Pages。
+- **主题与设置**：明暗主题切换入口在 `#/account` 偏好设置（暗色为出厂默认），服务端 `settings` 覆盖本地主题缓存并参与同步。
+- **桌面端与发版**：Electron 首次建号向导；`.github/workflows/release.yml` 已恢复 **Windows + macOS 双平台** CI 发版（tag `v0.1.0` 已打），不再是「纯手动打包」。
+
+> 当前 `npm test` 权威基线（2026-11-12 实测）：**36 文件 / 369 通过 · 3 跳过（共 372）**。
+> 迭代排期与研发可执行需求清单见 [docs/产品与竞品分析/迭代需求排期与研发交付包-2026-11-12.md](./docs/产品与竞品分析/迭代需求排期与研发交付包-2026-11-12.md)。
+
 ## 🏗️ 架构
 
 ```
@@ -108,7 +123,7 @@ GET 永不回显；流式试用台；按账号统计用量。
 
 - `src/server/` NestJS：auth（认证）/ tenant（行级隔离唯一入口）/ resumes / business /
   referral（内推）/ render（渲染孤岛与双 PDF）/ ai / collect / users / security（回环守卫）
-- `src/web/` React：登录 / 简历库 / 编辑器 / 附件库 / 冲突恢复 / 公司档案 / 内推 / 投递 / AI / 面经 / 账号与设置
+- `src/web/` React（HashRouter **22 条业务路由**）：总览 / 岗位列表与详情 / 简历库与编辑器 / 作品集 / 经历素材 / 公司档案与对比 / 内推 / 投递追踪 / 附件库 / 云同步 / 冲突恢复 / AI 试用台 / AI 面试练习三页 / 面经库 / 账号与设置。侧栏为「工作区 / 智能工具」两组，宽文字侧栏（默认）与窄图标栏可切换，图标均带 `aria-label`
 - `legacy/` v1 渲染引擎资产（8 个 JS + style.css + html2canvas/jspdf + boss-collect），
   只读引用、只改 bug 不重构
 - `drizzle/` 手写迁移 SQL（`_migrations` 记录已应用）
@@ -128,16 +143,20 @@ GET 永不回显；流式试用台；按账号统计用量。
 | `GET /api/attachments`（可选 owner 过滤） | 附件清单 |
 | `GET /api/attachments/:id` / `:id/raw` | 元数据 / 字节流 |
 | `DELETE /api/attachments/:id` | 软删除（写墓碑，不删 blob） |
-| `GET /api/attachments/sync/changes?since=<cursor>&limit=` | 同步增量（附件 + 全部业务表），返回 `nextCursor`，limit ≤ 1000 |
+| `GET /api/attachments/sync/changes?since=<cursor>&limit=` | 同步增量（附件 + 全部业务表），返回 `nextCursor`，`limit` **默认 500**（当前代码无 ≤1000 显式校验；如需硬上限见迭代排期 REQ-08） |
 
 > 前端调用注意 `api.ts` 铁律：无 body 的 `DELETE` / `GET` 不要带 `Content-Type: application/json`；
 > multipart 上传也不要手动设 `Content-Type`（浏览器需自动生成 boundary）。
 
 **为将来上云预留**：`BLOB_STORE` 是唯一可替换点，业务代码只依赖 `BlobStore` 接口；
 云端 object key 直接复用 sha256，零映射、天然增量（先交换 hash 清单，只传缺失的）。
-`change_log` 已覆盖**附件 + 全部业务表**：附件模块在应用层同事务记账，其余 12 张业务表
-由 `0010` / `0011` 的触发器自动记账（与业务写同事务、应用代码零侵入，
-软删除与物理删除都留下 `delete` 墓碑）。拉取游标由数据库单一序列统一生成、严格单调，
+`change_log` 已覆盖**附件 + 全部业务表**：附件模块在应用层同事务记账，其余业务表由 `0010` /
+`0011` 起逐表挂载触发器自动记账（后续 `0015_referrals`、`0016_practice` 5 张 `practice_*`、
+`0017_snippets` 均照同一模板续挂；与业务写同事务、应用代码零侵入，软删除与物理删除都留下
+`delete` 墓碑）。**口径提醒**：触发器覆盖表数、Sync Engine 的 `SYNCED_TABLES`（15 张）、
+`sync-import.ts` / `restore.ts` 的清单（14 张）三者并不相同，`versions / application_events /
+settings / ai_configs` 刻意排除；其中 **`snippets` 已铺触发器但尚未进引擎清单**，跨设备不推不拉，
+已登记为 I0 必修（见迭代排期 REQ-23）。拉取游标由数据库单一序列统一生成、严格单调，
 同一毫秒批量写不会因重复 HLC 被游标吃掉；账号 / 会话 / 统计表刻意不进入同步流，
 且 `api_key` 等敏感列绝不写进 outbox。
 
@@ -147,7 +166,7 @@ GET 永不回显；流式试用台；按账号统计用量。
 
 | 能力 | 落地 |
 |---|---|
-| HLC 时钟 | 12 张业务表统一加 `hlc / device_id / deleted_at`；`ca_hlc_state` 单行状态表 + `BEFORE` 触发器统一领号（同毫秒 `.000000 → .000001` 严格单调），收到远端时钟会 `observe`，保证后续本地写一定排在已见远端写之后。应用代码不自己算时钟，`import:v1` 和直接 SQL 也自动覆盖 |
+| HLC 时钟 | 0011 当时的 12 张业务表统一加 `hlc / device_id / deleted_at`（后续 0015~0017 新表照同模板续挂）；`ca_hlc_state` 单行状态表 + `BEFORE` 触发器统一领号（同毫秒 `.000000 → .000001` 严格单调），收到远端时钟会 `observe`，保证后续本地写一定排在已见远端写之后。应用代码不自己算时钟，`import:v1` 和直接 SQL 也自动覆盖 |
 | 软删除墓碑 | 8 张可变实体表（简历 / 公司 / JD / 投递 / 岗位 / 作品集 / 面试复盘 / 面经）的删除改成 `UPDATE deleted_at`；`TenantDb` 所有读走 `active()` 自动过滤，写也排除已删行；同 id 重建走 `revive()` 复活，不撞 `(user_id,id)` 复合主键。`versions / application_events / settings / ai_configs` 是「只增不删」的流水与单例，仍走物理删除 |
 | 冲突快照 | 回灌时按业务 HLC + `device_id` 做 LWW：**无论谁胜都把落败方整行留进 `conflict_snapshots`**（远端胜存本地旧版，本地胜存远端版本），敏感列先经 `ca_safe_row_json` 剔除。刻意不复用 `versions`——那是用户手动版本历史，混进去会污染版本列表 |
 | chat append-only | `tracker.payload.chat[]` 仍由前端与采集器整块写，触发器按 `(user, tracker, role+text+ts)` 幂等投影成 `tracker_chat_events`；将来合并两台设备的聊天记录按 `dedupe_key` 取并集，而不是让整块 jsonb 的 LWW 吞掉一边的对话 |
@@ -406,6 +425,12 @@ SYNC_BASE_URL=http://127.0.0.1:8787 SYNC_SKIP_BLOB=1 npx ts-node scripts/sync-sm
 **剩余非阻塞项**：`#/sync` 桌面端手测、两台真实设备恢复码加入实测（等桌面安装包发布）；
 服务器 2026-12-08 到期需续费；有域名后换 Let's Encrypt 去掉客户端 `insecureTls`。
 
+**Transport 切换口径澄清（2026-11-12 复核）**：`scripts/sync-smoke.ts` 支持
+`SYNC_TRANSPORT=cloudbase|cloudflare` 切换通道做联调，但**生产编排** `sync-cloud.service.ts`
+目前硬编码 `new RemoteSyncTransport`（自建服务器通道），并无运行时切换入口。
+「换厂商只换一个适配器」指架构contract成立，不等于生产已可配置切换；生产可配置已登记为
+后续池需求（迭代排期 REQ-24，涉及同步底座需单独评审）。
+
 以上都不影响当前单机功能：断网、无云账号时本地全部可用。完整技术方案见
 `docs/技术设计方案/云同步技术设计方案.md`。
 
@@ -457,8 +482,10 @@ HttpOnly；AI 上游只放行 https 公网 / http 回环。桌面版首次建号
 - [docs/技术设计方案/](./docs/技术设计方案/)：技术设计方案（含 [云同步技术设计方案](./docs/技术设计方案/云同步技术设计方案.md)、[数据采集与统一导入](./docs/技术设计方案/数据采集与统一导入-技术设计方案.md)）
 - [docs/需求文档/](./docs/需求文档/README.md)：需求清单（D/N 编号）
 - [docs/桌面客户端.md](./docs/桌面客户端.md)：Windows / macOS 客户端架构、打包、数据目录与排障
-- [ROADMAP.md](./ROADMAP.md)：路线图（含 v1 退役后待补能力清单）
+- [ROADMAP.md](./ROADMAP.md)：路线图（历史归档与后续池；**当期排期以下方交付包为准**）
 - [CHANGELOG.md](./CHANGELOG.md)：变更记录
+- [迭代需求排期与研发交付包（2026-11-12）](./docs/产品与竞品分析/迭代需求排期与研发交付包-2026-11-12.md)：**当前唯一迭代排期入口**（决策、需求池、RICE、I0~I2 日历排期、研发可执行验收清单、风险与门禁）
+- [产品原型思路与交互流程梳理 v1.1](./docs/产品与竞品分析/产品原型思路与交互流程梳理-优化建议与迭代方向.md)：信息架构、22 路由、核心任务流与断点
 
 ## ⚖️ 已退役（v1 能力，不再维护）
 

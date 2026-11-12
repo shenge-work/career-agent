@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
  * - Escape 关闭（等同「取消」）
  * - 点击背景关闭（等同「取消」）
  * - role="dialog" + aria-modal + aria-labelledby 语义
+ * - 可选第三动作（extraLabel / onExtra）：纯增量，未提供时行为与两按钮版本完全一致
  */
 export default function ConfirmModal({
   open,
@@ -13,20 +14,24 @@ export default function ConfirmModal({
   message,
   confirmLabel = '确认',
   cancelLabel = '取消',
+  extraLabel,
   danger = true,
   busy = false,
   onConfirm,
   onCancel,
+  onExtra,
 }: {
   open: boolean;
   title: string;
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  extraLabel?: string;
   danger?: boolean;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  onExtra?: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -92,6 +97,11 @@ export default function ConfirmModal({
           <button className="mini" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </button>
+          {onExtra && (
+            <button className="mini" onClick={onExtra} disabled={busy}>
+              {busy ? '保存中…' : (extraLabel || '其他操作')}
+            </button>
+          )}
           <button
             className={`mini${danger ? ' danger' : ''}`}
             ref={confirmRef}

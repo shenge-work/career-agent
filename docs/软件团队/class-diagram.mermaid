@@ -1,0 +1,77 @@
+classDiagram
+    direction LR
+    class AutosaveStatus {
+        <<enumeration>>
+        idle
+        editing
+        saving
+        saved
+        error
+    }
+    class AutosaveView {
+        +AutosaveStatus status
+        +string saveError
+        +number lastSavedAt
+        +boolean dirty
+        +boolean inflight
+        +number pendingCount
+    }
+    class SaveTransport {
+        <<interface>>
+        +call(payload, seq) Promise~void~
+    }
+    class AutosaveOptions {
+        +SaveTransport transport
+        +onChange(view) void
+        +onDrained() void
+        +now() number
+    }
+    class AutosaveController {
+        -string baseline
+        -any pending
+        -number seq
+        -number inflightSeq
+        -AutosaveStatus status
+        -string saveError
+        -number lastSavedAt
+        -boolean disposed
+        -boolean inflight
+        +constructor(opts) void
+        +reset(draft) void
+        +touch(draft) void
+        +commit() void
+        +retry(draft) void
+        +flushAndWait(draft) Promise~void~
+        +isDirty(draft) boolean
+        +isIdle() boolean
+        +dispose() void
+        +view() AutosaveView
+        -pump() void
+        -isStale(seq) boolean
+    }
+    class Editor {
+        <<React Component>>
+        -ctrlRef AutosaveController
+        -draftRef any
+        -saveView AutosaveView
+        -saveError string
+        -leaveOpen boolean
+        +useEffect_debounce_800ms() void
+        +onDrained() void
+        +bestEffortFlush(id, payload) boolean
+        +pushSaveError(msg) void
+        +handleRetry() void
+        +handleBack(e) void
+    }
+    class ConfirmModal {
+        <<React Component>>
+        +extraLabel string
+        +onExtra() void
+    }
+    AutosaveController ..> AutosaveOptions : 构造注入
+    AutosaveController ..> SaveTransport : 注入
+    AutosaveController ..> AutosaveView : 推送
+    AutosaveController --> AutosaveStatus : 持有
+    Editor --> AutosaveController : useRef 持有并驱动
+    Editor ..> AutosaveView : 渲染状态条
+    Editor --> ConfirmModal : 离开三按钮

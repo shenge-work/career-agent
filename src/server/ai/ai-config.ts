@@ -17,6 +17,22 @@ export interface AiRuntimeConfig {
   source: 'database';
 }
 
+/** 单厂商的浏览器可见脱敏对象（永不含 apiKey 明文）。 */
+export interface AiProviderConfig {
+  provider: string;
+  baseUrl: string;
+  models: Record<string, string>;
+  temperature: number;
+  timeoutMs: number;
+  hasApiKey: boolean;
+  isActive: boolean;
+  /** 最近一次用该厂商调用的模型 / 时间（来自 ai_usage.provider，可空）。 */
+  lastModel?: string | null;
+  lastAt?: string | null;
+}
+
+export type AiRuntimeConfigWithActive = AiRuntimeConfig & { isActive: boolean };
+
 export interface ConfigPatch {
   provider?: unknown;
   baseUrl?: unknown;
@@ -144,6 +160,9 @@ export function normalizeConfig(
 
   const provider = String(patch.provider ?? '').trim() || 'openai-compatible';
   if (provider.length > 60) return { ok: false, error: 'provider 过长' };
+  if (!/^[a-z0-9-]+$/.test(provider)) {
+    return { ok: false, error: 'provider 只允许小写字母、数字与连字符（-）' };
+  }
 
   const temperature = patch.temperature === undefined ? 0.4 : Number(patch.temperature);
   if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
@@ -196,8 +215,54 @@ export function publicConfig(cfg: AiRuntimeConfig | null) {
   };
 }
 
+/** 单厂商脱敏对象：永不含 apiKey 明文，只给 hasApiKey 标记。 */
+export function publicProviderConfig(cfg: AiRuntimeConfigWithActive): AiProviderConfig {
+  return {
+    provider: cfg.provider,
+    baseUrl: cfg.baseUrl,
+    models: cfg.models,
+    temperature: cfg.temperature,
+    timeoutMs: cfg.timeoutMs,
+    hasApiKey: !!cfg.apiKey,
+    isActive: !!cfg.isActive,
+  };
+}
+
+/** 多厂商脱敏列表 + 当前生效厂商标识。 */
+export function publicConfigs(
+  list: AiRuntimeConfigWithActive[],
+  activeProvider: string
+): { configs: AiProviderConfig[]; activeProvider: string } {
+  const active = activeProvider || list.find((c) => c.isActive)?.provider || '';
+  return {
+    configs: list.map((cfg) => publicProviderConfig(cfg)),
+    activeProvider: active,
+  };
+}
+
+/** 从 baseUrl 主机名派生自定义 provider slug：`custom-<sanitized-host>`，小写、非字母数字转 `-`、去首尾 `-`。 */
+export function deriveProviderSlug(baseUrl: unknown): string {
+  let host = '';
+  try {
+    host = new URL(String(baseUrl ?? '')).hostname;
+  } catch {
+    host = '';
+  }
+  const sanitized = host
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const slug = sanitized ? `custom-${sanitized}` : 'custom';
+  return slug.slice(0, 60).replace(/-+$/, '') || 'custom';
+}
+
 export function upstreamUrl(cfg: AiRuntimeConfig): string {
   return cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
+}
+
+/** OpenAI 兼容的模型列表端点：GET {baseUrl}/models。用于前端自动拉取模型 id 下拉。 */
+export function modelsUrl(cfg: AiRuntimeConfig): string {
+  return cfg.baseUrl.replace(/\/+$/, '') + '/models';
 }
 
 /** 非流式响应体字节上限：超限即中断，防止异常/恶意上游把单次请求内存拉满。 */
@@ -207,7 +272,8 @@ export const MAX_UPSTREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
 export function buildChatPayload(
   cfg: AiRuntimeConfig,
   body: { model?: unknown; messages?: unknown; temperature?: unknown; max_tokens?: unknown; response_format?: unknown },
-  stream: boolean
+  stream: boolean,
+  opts?: { responseFormat?: 'json_object' | null }
 ): { ok: true; payload: Record<string, unknown>; model: string } | { ok: false; error: string } {
   const model = String(body.model || cfg.models.fast || cfg.models.strong || '').trim();
   if (!model) return { ok: false, error: '未指定模型：请在 AI 配置里填写 models.fast，或请求里带 model' };
@@ -227,8 +293,13 @@ export function buildChatPayload(
     temperature: typeof body.temperature === 'number' ? body.temperature : cfg.temperature,
     stream,
   };
-  if (body.response_format && typeof body.response_format === 'object') {
-    payload.response_format = body.response_format;
+  // response_format 优先级：opts 显式指定 > body.response_format；opts.responseFormat=null 表示强制移除。
+  let rf: unknown = body.response_format;
+  if (opts && opts.responseFormat !== undefined) {
+    rf = opts.responseFormat ? { type: opts.responseFormat } : null;
+  }
+  if (rf && typeof rf === 'object') {
+    payload.response_format = rf;
   }
   if (body.max_tokens !== undefined) {
     const n = Number(body.max_tokens);

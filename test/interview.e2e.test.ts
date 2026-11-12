@@ -200,12 +200,13 @@ describe('N12 S2 · 面试复盘 + 面经知识库', () => {
     const res = await call('POST', '/api/agent/review-interview', b, { noteId: note.id });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.aiReview.summary).toBeTruthy();
-    expect(j.aiReview.degraded).toBe(true);
-    expect(j.aiReview.generatedAt).toBeTypeOf('number');
+    expect(j.source).toBe('fallback');
+    expect(j.data.aiReview.summary).toBeTruthy();
+    expect(j.data.aiReview.degraded).toBe(true);
+    expect(j.data.aiReview.generatedAt).toBeTypeOf('number');
 
     const got = await call('GET', `/api/interview-notes/${note.id}`, b);
-    expect(got.json().payload.aiReview.summary).toBe(j.aiReview.summary);
+    expect(got.json().payload.aiReview.summary).toBe(j.data.aiReview.summary);
   });
 
   it('review-interview：AI 已配置时结构化复盘，model 落库', async () => {
@@ -220,10 +221,11 @@ describe('N12 S2 · 面试复盘 + 面经知识库', () => {
     const res = await call('POST', '/api/agent/review-interview', a, { noteId: note.id });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.aiReview.degraded).toBe(false);
-    expect(j.aiReview.model).toBe('mock-fast');
-    expect(j.aiReview.strengths).toContain('React 原理答得清晰');
-    expect(j.aiReview.weaknesses).toContain('项目难点表达不够聚焦');
+    expect(j.source).toBe('ai');
+    expect(j.data.aiReview.degraded).toBe(false);
+    expect(j.data.aiReview.model).toBe('mock-fast');
+    expect(j.data.aiReview.strengths).toContain('React 原理答得清晰');
+    expect(j.data.aiReview.weaknesses).toContain('项目难点表达不够聚焦');
   });
 
   it('review-interview：缺少 transcript 返回 400', async () => {
@@ -300,10 +302,11 @@ describe('N12 S2 · 面试复盘 + 面经知识库', () => {
     const res = await call('POST', '/api/agent/kb-ask', b, { question: '事件循环是什么' });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.degraded).toBe(true);
-    expect(j.grounded).toBe(true);
-    expect(j.sources).toContain(kb.title);
-    expect(j.answer).toContain('事件循环');
+    expect(j.source).toBe('fallback');
+    expect(j.data.degraded).toBe(true);
+    expect(j.data.grounded).toBe(true);
+    expect(j.data.sources).toContain(kb.title);
+    expect(j.data.answer).toContain('事件循环');
   });
 
   it('kb-ask：AI 已配置时基于知识库作答，sources 标注', async () => {
@@ -319,11 +322,12 @@ describe('N12 S2 · 面试复盘 + 面经知识库', () => {
     const res = await call('POST', '/api/agent/kb-ask', a, { question: '离职原因怎么答' });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.degraded).toBe(false);
-    expect(j.aiUsed).toBe(true);
-    expect(j.model).toBe('mock-fast');
-    expect(j.grounded).toBe(true);
-    expect(j.sources.length).toBeGreaterThan(0);
+    expect(j.source).toBe('ai');
+    expect(j.data.degraded).toBe(false);
+    expect(j.data.aiUsed).toBe(true);
+    expect(j.data.model).toBe('mock-fast');
+    expect(j.data.grounded).toBe(true);
+    expect(j.data.sources.length).toBeGreaterThan(0);
   });
 
   it('kb-ask：问题为空返回 400', async () => {
@@ -336,7 +340,7 @@ describe('N12 S2 · 面试复盘 + 面经知识库', () => {
     const res = await call('POST', '/api/agent/kb-ask', b, { question: '完全不相关的问题xyz' });
     expect(res.statusCode).toBe(200);
     const j = res.json();
-    expect(j.grounded).toBe(false);
-    expect(j.sources.length).toBe(0);
+    expect(j.data.grounded).toBe(false);
+    expect(j.data.sources.length).toBe(0);
   });
 });

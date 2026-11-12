@@ -6,8 +6,10 @@ import {
   Get,
   HttpCode,
   HttpException,
+  Param,
   Post,
   Put,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -22,8 +24,16 @@ import type { ConfigPatch } from './ai-config';
 
 function rethrow(e: unknown): never {
   if (e instanceof AiProxyError) {
+    // 结构化返回统一错误模型：前端拿到 code/retryable/retryAfterMs 可做友好提示与退避。
     throw new HttpException(
-      { statusCode: e.status, message: e.message, error: e.code || 'AiProxyError', code: e.code },
+      {
+        statusCode: e.status,
+        message: e.message,
+        error: e.code || 'AiProxyError',
+        code: e.code,
+        retryable: e.retryable,
+        retryAfterMs: e.retryAfterMs,
+      },
       e.status
     );
   }
@@ -44,10 +54,34 @@ export class AiController {
     return this.ai.status(user.id);
   }
 
+  /** 账号级用量对账（0020）：GET /api/ai/usage?range=7d|30d|all。 */
+  @Get('usage')
+  usage(@CurrentUser() user: CurrentUserType, @Query('range') range?: string) {
+    return this.ai.usageStats(user.id, range || '30d');
+  }
+
+  @Get('configs')
+  listConfigs(@CurrentUser() user: CurrentUserType) {
+    return this.ai.listConfigs(user.id);
+  }
+
   @Put('config')
   async saveConfig(@CurrentUser() user: CurrentUserType, @Body() body: ConfigPatch) {
     try {
-      return await this.ai.saveConfig(user.id, body || {});
+      return await this.ai.saveConfig(user.id, undefined, body || {});
+    } catch (e) {
+      return rethrow(e);
+    }
+  }
+
+  @Put('config/:provider')
+  async saveProviderConfig(
+    @CurrentUser() user: CurrentUserType,
+    @Param('provider') provider: string,
+    @Body() body: ConfigPatch
+  ) {
+    try {
+      return await this.ai.saveConfig(user.id, provider, body || {});
     } catch (e) {
       return rethrow(e);
     }
@@ -58,10 +92,40 @@ export class AiController {
     return this.ai.clearConfig(user.id);
   }
 
+  @Delete('config/:provider')
+  deleteConfig(@CurrentUser() user: CurrentUserType, @Param('provider') provider: string) {
+    return this.ai.deleteConfig(user.id, provider);
+  }
+
+  @Post('config/:provider/activate')
+  @HttpCode(200)
+  async activateConfig(@CurrentUser() user: CurrentUserType, @Param('provider') provider: string) {
+    try {
+      return await this.ai.setActive(user.id, provider);
+    } catch (e) {
+      return rethrow(e);
+    }
+  }
+
   @Post('test')
   @HttpCode(200) // 探活不是创建资源，保持与 v1 /api/ai/test 的 200 契约
-  test(@CurrentUser() user: CurrentUserType) {
-    return this.ai.test(user.id);
+  test(@CurrentUser() user: CurrentUserType, @Body() body: { provider?: unknown }) {
+    const provider = body?.provider ? String(body.provider) : undefined;
+    return this.ai.test(user.id, provider);
+  }
+
+  /**
+   * 拉取上游可用模型列表（GET {baseUrl}/models 的服务端代理），供前端下拉选择。
+   * body 可带尚未保存的 baseUrl / apiKey；留空则用已保存配置。
+   */
+  @Post('models')
+  @HttpCode(200)
+  async models(@CurrentUser() user: CurrentUserType, @Body() body: any) {
+    try {
+      return await this.ai.listModels(user.id, body || {});
+    } catch (e) {
+      return rethrow(e);
+    }
   }
 
   /**

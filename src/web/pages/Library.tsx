@@ -6,11 +6,13 @@ import {
   del,
   fmtTime,
   post,
+  type ActionResult,
   type JdParseResult,
   type ResumeItem,
   type VersionItem,
 } from '../api';
 import ConfirmModal from '../components/ConfirmModal';
+import SourceBadge from '../components/SourceBadge';
 
 function sectionsOf(p: Record<string, any> | null | undefined): any[] {
   if (!p) return [];
@@ -115,7 +117,7 @@ export default function Library() {
   const [error, setError] = useState('');
   const [jdText, setJdText] = useState('');
   const [jdResult, setJdResult] = useState<any>(null);
-  const [jdParsed, setJdParsed] = useState<JdParseResult | null>(null);
+  const [jdParsed, setJdParsed] = useState<ActionResult<JdParseResult> | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [restoreVersionId, setRestoreVersionId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'updated' | 'title'>('updated');
@@ -200,7 +202,7 @@ export default function Library() {
 
   const parseM = useMutation({
     mutationFn: (t: string) =>
-      post<JdParseResult>('/agent/parse-jd', { jdText: t, resumeId: selectedId }),
+      post<ActionResult<JdParseResult>>('/agent/parse-jd', { jdText: t, resumeId: selectedId }),
     onSuccess: (r) => setJdParsed(r),
     onError: onFail,
   });
@@ -460,40 +462,44 @@ export default function Library() {
                 {jdParsed && (
                   <div className="jd-report">
                     <div className="jd-stats">
-                      <span><b>{jdParsed.parsed.position}</b></span>
-                      {jdParsed.parsed.company && <span className="muted small">{jdParsed.parsed.company}</span>}
+                      <span><b>{jdParsed.data.parsed.position}</b></span>
+                      {jdParsed.data.parsed.company && <span className="muted small">{jdParsed.data.parsed.company}</span>}
+                      <SourceBadge source={jdParsed.source} />
                       <span className="muted small">
-                        {jdParsed.aiUsed ? `AI 解析${jdParsed.model ? ' · ' + jdParsed.model : ''}` : '规则降级（未配置 AI）'}
+                        {jdParsed.data.aiUsed ? `AI 解析${jdParsed.data.model ? ' · ' + jdParsed.data.model : ''}` : '规则降级'}
                       </span>
+                      {jdParsed.meta?.fallbackReason && (
+                        <span className="muted small">{jdParsed.meta.fallbackReason}</span>
+                      )}
                     </div>
-                    {jdParsed.parsed.summary && (
-                      <p className="muted small">{jdParsed.parsed.summary}</p>
+                    {jdParsed.data.parsed.summary && (
+                      <p className="muted small">{jdParsed.data.parsed.summary}</p>
                     )}
-                    {jdParsed.parsed.requirements.length > 0 && (
+                    {jdParsed.data.parsed.requirements.length > 0 && (
                       <div className="jd-group">
-                        <div className="jd-group-title">任职要求（{jdParsed.parsed.requirements.length}）</div>
+                        <div className="jd-group-title">任职要求（{jdParsed.data.parsed.requirements.length}）</div>
                         <div className="jd-chips">
-                          {jdParsed.parsed.requirements.map((r) => (
+                          {jdParsed.data.parsed.requirements.map((r) => (
                             <span key={r} className="jd-chip">{r}</span>
                           ))}
                         </div>
                       </div>
                     )}
-                    {jdParsed.parsed.preferred.length > 0 && (
+                    {jdParsed.data.parsed.preferred.length > 0 && (
                       <div className="jd-group">
-                        <div className="jd-group-title">加分项（{jdParsed.parsed.preferred.length}）</div>
+                        <div className="jd-group-title">加分项（{jdParsed.data.parsed.preferred.length}）</div>
                         <div className="jd-chips">
-                          {jdParsed.parsed.preferred.map((r) => (
+                          {jdParsed.data.parsed.preferred.map((r) => (
                             <span key={r} className="jd-chip weak">{r}</span>
                           ))}
                         </div>
                       </div>
                     )}
-                    {jdParsed.parsed.keywords.length > 0 && (
+                    {jdParsed.data.parsed.keywords.length > 0 && (
                       <div className="jd-group">
-                        <div className="jd-group-title">核心关键词（{jdParsed.parsed.keywords.length}）</div>
+                        <div className="jd-group-title">核心关键词（{jdParsed.data.parsed.keywords.length}）</div>
                         <div className="jd-chips">
-                          {jdParsed.parsed.keywords.map((r) => (
+                          {jdParsed.data.parsed.keywords.map((r) => (
                             <span key={r} className="jd-chip covered">{r}</span>
                           ))}
                         </div>

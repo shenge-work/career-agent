@@ -107,16 +107,54 @@ export function parseJsonLoose<T>(raw: string): T | null {
   let candidate = s;
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) candidate = fence[1].trim();
-  else {
-    const first = s.indexOf('{');
-    const last = s.lastIndexOf('}');
-    if (first !== -1 && last > first) candidate = s.slice(first, last + 1);
-  }
+  else candidate = extractBalancedJson(s);
+
   try {
     return JSON.parse(candidate) as T;
   } catch {
-    return null;
+    // 失败回退：直接对整段文本再试一次（有些模型输出就是裸 JSON）。
+    try {
+      return JSON.parse(s) as T;
+    } catch {
+      return null;
+    }
   }
+}
+
+/**
+ * 从带噪音的文本里截取「首尾平衡的大括号」包围的 JSON 片段。
+ * 用括号计数找首尾，而非 firstIndexOf/lastIndexOf，正确处理嵌套大括号：
+ * 例如 `{"a":{"b":1},"c":[1,2]}` 不会在内部第一个 `}` 处截断。
+ */
+function extractBalancedJson(s: string): string {
+  const first = s.indexOf('{');
+  if (first === -1) return s;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = first; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) return s.slice(first, i + 1);
+    }
+  }
+  // 未闭合的 JSON（半截输出）：回退到整段文本，交给 JSON.parse 报错。
+  return s.slice(first);
 }
 
 /** 规则层降级：未配置 AI 时，从 JD 文本用纯规则拼一个「结构化」结果（能力有限但可用）。 */

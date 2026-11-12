@@ -249,6 +249,19 @@ export interface SettingsResponse {
   payload: Record<string, any>;
 }
 
+/** 单厂商的脱敏配置（服务端永不回传 apiKey 明文）。 */
+export interface AiProviderConfig {
+  provider: string;
+  baseUrl: string;
+  models: Record<string, string>;
+  temperature: number;
+  timeoutMs: number;
+  hasApiKey: boolean;
+  isActive: boolean;
+  lastModel?: string | null;
+  lastAt?: string | null;
+}
+
 export interface AiStatus {
   configured: boolean;
   hasApiKey: boolean;
@@ -259,6 +272,12 @@ export interface AiStatus {
   temperature: number;
   timeoutMs: number;
   source: string;
+  /** none=未配置 / partial=部分配置（缺 fast 或 strong）/ full=完整配置。 */
+  configuredLevel?: 'none' | 'partial' | 'full';
+  /** 当前生效厂商标识（多厂商并存）；空 = 尚未设置生效厂商。 */
+  activeProvider?: string;
+  /** 已配置厂商列表（多厂商并存）。 */
+  configs?: AiProviderConfig[];
   nodeVersion: string;
   hint: string;
   usage: {
@@ -267,6 +286,9 @@ export interface AiStatus {
     todayRequests: number;
     lastAt: string | null;
     lastModel: string | null;
+    avgLatencyMs?: number | null;
+    totalPromptTokens?: number;
+    totalCompletionTokens?: number;
     days: Array<{ day: string; requests: number; errors: number }>;
   };
 }
@@ -349,6 +371,15 @@ export interface Pitch {
   model: string | null;
   basedOn: string;
   degraded: boolean;
+  /** P1-4 · 重新生成的历史版本（本地最多 5 条）。 */
+  history?: Array<{
+    greeting: string;
+    coverLetter: string;
+    generatedAt: number | null;
+    model: string | null;
+    basedOn: string;
+    degraded: boolean;
+  }>;
 }
 
 /** N12 · /api/agent/gen-pitch 响应（返回更新后的岗位行 + pitch）。 */
@@ -422,6 +453,98 @@ export interface KbAskResult {
   degraded: boolean;
   hitCount: number;
 }
+
+/** P1-1 · 动作结果来源标记（与服务端 AiActionSource 同构）。 */
+export type AiActionSource = 'ai' | 'fallback' | 'error';
+
+/** 统一 AI 错误结构（与服务端 AiError 同构，含中文 message）。 */
+export interface AiErrorInfo {
+  code: string;
+  message: string;
+  status?: number;
+  retryable?: boolean;
+  retryAfterMs?: number;
+}
+
+/** P1-1 · 动作结果统一结构：data 承载原有字段，source/meta 提供来源与耗时。 */
+export interface ActionResult<T> {
+  source: AiActionSource;
+  data: T;
+  meta?: {
+    model?: string | null;
+    latencyMs?: number;
+    fallbackReason?: string;
+    error?: AiErrorInfo;
+  };
+}
+
+/** P1-3 · 单个模型的能力探活结果。 */
+export interface AiCapability {
+  model: string;
+  reachable: boolean;
+  supportsJsonObject?: boolean;
+  supportsStream?: boolean;
+  latencyMs: number;
+  error?: AiErrorInfo;
+}
+
+/** P1-3 · /api/ai/test 的能力探活结果（旧字段 ok/latencyMs/model/sample 保留）。 */
+export interface AiTestResult {
+  ok: boolean;
+  model: string;
+  latencyMs: number;
+  sample?: string;
+  capabilities?: { fast: AiCapability; strong: AiCapability };
+}
+
+/** 多厂商 AI 配置 API 封装（P0-6）。 */
+export const putConfig = (provider: string, body: unknown) =>
+  put<AiProviderConfig>(`/ai/config/${encodeURIComponent(provider)}`, body);
+
+export const delConfig = (provider: string) =>
+  del<{ ok: boolean; provider: string }>(`/ai/config/${encodeURIComponent(provider)}`);
+
+export const activateConfig = (provider: string) =>
+  post<{ ok: boolean; activeProvider: string }>(`/ai/config/${encodeURIComponent(provider)}/activate`);
+
+export const listConfigs = () =>
+  api<{ configs: AiProviderConfig[]; activeProvider: string }>('/ai/configs');
+
+/** 探活：不传 provider 时走「当前生效厂商」，传 provider 时探活指定厂商。 */
+export const testAi = (provider?: string) =>
+  post<AiTestResult & { error?: string }>('/ai/test', { ...(provider ? { provider } : {}) });
+
+/** 0020 · 用量对账：按厂商/模型/日聚合的账号级明细统计。 */
+export interface AiUsageGroup {
+  key: string;
+  requests: number;
+  errors: number;
+  promptTokens: number;
+  completionTokens: number;
+  avgLatencyMs: number | null;
+  lastAt: string | null;
+  provider?: string | null;
+}
+
+export interface AiUsageStats {
+  range: string;
+  since: string | null;
+  totals: {
+    requests: number;
+    errors: number;
+    errorRate: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    avgLatencyMs: number | null;
+  };
+  providers: AiUsageGroup[];
+  models: AiUsageGroup[];
+  days: Array<{ day: string; requests: number; errors: number; promptTokens: number; completionTokens: number }>;
+}
+
+export const getAiUsage = (range: string) =>
+  api<AiUsageStats>(`/ai/usage?range=${encodeURIComponent(range)}`);
 
 /** N14 · AI 面试练习：会话 / 题目 / 回答 / 评分 / 弱项。 */
 export type PracticeSessionStatus = 'configuring' | 'active' | 'paused' | 'completed';

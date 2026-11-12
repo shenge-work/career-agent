@@ -4,14 +4,16 @@ import { api, post, put, fmtTime, type SettingsResponse, type UserRow } from '..
 import type { CurrentUser } from '../../shared/constants';
 import { THEMES, switchTheme, themeFromSettings } from '../theme';
 import AiSettings from '../AiSettings';
+import UsagePanel from './Usage';
 
-type Section = 'account' | 'preferences' | 'members' | 'ai';
+type Section = 'account' | 'preferences' | 'members' | 'ai' | 'usage';
 
 const SECTIONS: { key: Section; label: string; icon: string }[] = [
   { key: 'account', label: '账户', icon: '👤' },
   { key: 'preferences', label: '偏好设置', icon: '⚙' },
   { key: 'members', label: '成员管理', icon: '👥' },
   { key: 'ai', label: 'AI 模型', icon: '✦' },
+  { key: 'usage', label: '用量统计', icon: '▥' },
 ];
 
 export default function Account({ user }: { user: CurrentUser }) {
@@ -219,6 +221,8 @@ export default function Account({ user }: { user: CurrentUser }) {
           )}
 
           {section === 'ai' && <AiSettings />}
+
+          {section === 'usage' && <UsagePanel />}
         </div>
       </div>
     </>

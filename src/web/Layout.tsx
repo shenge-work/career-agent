@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { api } from './api';
+import { useQuery } from '@tanstack/react-query';
+import { api, type AiStatus } from './api';
 import type { CurrentUser } from '../shared/constants';
 
 // 父子分组菜单：父级分组标题（可折叠）+ 子菜单项
@@ -46,6 +47,11 @@ export default function Layout({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  // 全局 AI 配置状态（P1-5）：脱敏状态只读，用于顶部徽标与「去设置」引导。
+  const { data: aiStatus } = useQuery({
+    queryKey: ['ai-status'],
+    queryFn: () => api<AiStatus>('/ai/status'),
+  });
   // 默认展开所有分组
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [accountOpen, setAccountOpen] = useState(false);
@@ -106,6 +112,14 @@ export default function Layout({
 
   // 所有菜单项平铺，去掉重复的总览（Logo 已经是总览入口）
   const allItems = GROUPS.flatMap((g) => g.items).filter((n) => n.to !== '/');
+
+  const aiLevel = aiStatus?.configuredLevel || (aiStatus?.configured ? 'full' : 'none');
+  const aiBadge =
+    aiLevel === 'full'
+      ? { label: 'AI 已配置', tone: 'tone-green' }
+      : aiLevel === 'partial'
+        ? { label: 'AI 部分配置', tone: 'tone-amber' }
+        : { label: 'AI 未配置', tone: 'tone-gray' };
 
   return (
     <div className={'shell' + (railCollapsed ? ' rail-collapsed' : '')}>
@@ -225,6 +239,16 @@ export default function Layout({
       {/* 内容区 */}
       <main className="content">
         <header className="content-topbar">
+          <div className="topbar-ai">
+            <span className={`status-badge ${aiBadge.tone}`} title="AI 模型配置状态">
+              {aiBadge.label}
+            </span>
+            {aiLevel !== 'full' && (
+              <NavLink to="/account" className="mini" title="前往「账号与设置 → AI 模型」配置">
+                去设置
+              </NavLink>
+            )}
+          </div>
           <div className="spacer" />
           <div className="account-menu" ref={accountRef}>
             <button

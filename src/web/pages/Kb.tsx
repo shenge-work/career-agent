@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, del, post, put, fmtTime, type KbAskResult, type KbItem } from '../api';
+import { api, del, post, put, fmtTime, type ActionResult, type KbAskResult, type KbItem } from '../api';
+import SourceBadge from '../components/SourceBadge';
 
 /**
  * 面经知识库（N12 S2）——「RAG 知识沉淀」的落点。
@@ -20,7 +21,7 @@ export default function Kb() {
 
   // 问答
   const [question, setQuestion] = useState('');
-  const [askResult, setAskResult] = useState<KbAskResult | null>(null);
+  const [askResult, setAskResult] = useState<ActionResult<KbAskResult> | null>(null);
 
   const onFail = (e: unknown) => setError((e as Error).message);
 
@@ -79,7 +80,7 @@ export default function Kb() {
   });
 
   const askM = useMutation({
-    mutationFn: (q: string) => post<KbAskResult>('/agent/kb-ask', { question: q }),
+    mutationFn: (q: string) => post<ActionResult<KbAskResult>>('/agent/kb-ask', { question: q }),
     onSuccess: (r) => {
       setAskResult(r);
       setError('');
@@ -247,16 +248,20 @@ export default function Kb() {
             {askResult && (
               <div className="kb-answer">
                 <div className="kb-answer-meta">
-                  {askResult.grounded ? (
-                    <span className="status-badge green">已命中知识库 {askResult.hitCount} 条</span>
+                  <SourceBadge source={askResult.source} />
+                  {askResult.data.grounded ? (
+                    <span className="status-badge green">已命中知识库 {askResult.data.hitCount} 条</span>
                   ) : (
                     <span className="status-badge amber">知识库无相关内容</span>
                   )}
-                  {askResult.degraded && <span className="muted small">（未配置 AI，返回原文）</span>}
+                  {askResult.data.degraded && <span className="muted small">（未配置 AI，返回原文）</span>}
+                  {askResult.meta?.fallbackReason && (
+                    <span className="muted small">{askResult.meta.fallbackReason}</span>
+                  )}
                 </div>
-                <p className="kb-answer-text">{askResult.answer}</p>
-                {askResult.sources.length > 0 && (
-                  <div className="muted small">引用：{askResult.sources.join('、')}</div>
+                <p className="kb-answer-text">{askResult.data.answer}</p>
+                {askResult.data.sources.length > 0 && (
+                  <div className="muted small">引用：{askResult.data.sources.join('、')}</div>
                 )}
               </div>
             )}
