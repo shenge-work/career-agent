@@ -21,6 +21,9 @@ import Attachments from './pages/Attachments';
 import Conflicts from './pages/Conflicts';
 import Sync from './pages/Sync';
 import Kb from './pages/Kb';
+import Interview from './pages/Interview';
+import InterviewSession from './pages/InterviewSession';
+import InterviewGrowth from './pages/InterviewGrowth';
 import Editor from './pages/Editor';
 
 export default function App() {
@@ -89,6 +92,9 @@ export default function App() {
           <Route path="/account" element={<Account user={data.user} />} />
           <Route path="/ai" element={<AiPlayground />} />
           <Route path="/kb" element={<Kb />} />
+          <Route path="/interview" element={<Interview />} />
+          <Route path="/interview/growth" element={<InterviewGrowth />} />
+          <Route path="/interview/:sessionId" element={<InterviewSession />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

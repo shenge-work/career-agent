@@ -611,6 +611,165 @@ export const syncState = pgTable('sync_state', {
   updatedAt: updatedAt(),
 });
 
+/**
+ * N14 · AI 面试练习（Practice）——「练习过程 + 反馈闭环」的落点。
+ *
+ * 5 张表全量接入云同步（可变实体表，软删 + LWW + 冲突留底）：
+ *   · practice_sessions    练习会话（状态机 + 目标快照 + 用量摘要）
+ *   · practice_questions   题目（同题重练链 question_key + regenerated_from）
+ *   · practice_answers     回答轮次（turn 0=首答 / 1..n=追问，草稿二态）
+ *   · practice_evaluations 评分（append-only 语义，source ai|self 分列）
+ *   · practice_weaknesses  弱项清单（pending/practiced/resolved 生命周期）
+ * 应用层不写时钟：hlc/device_id 由 0011 触发器统一授时，deleted_at 软删除墓碑。
+ */
+export const practiceSessions = pgTable(
+  'practice_sessions',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', {
+      enum: ['configuring', 'active', 'paused', 'completed'],
+    })
+      .notNull()
+      .default('configuring'),
+    applicationId: text('application_id'),
+    resumeId: text('resume_id'),
+    goal: jsonb('goal').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    currentQuestionOrder: integer('current_question_order').notNull().default(0),
+    usage: jsonb('usage').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('practice_sessions_user_idx').on(t.userId),
+    index('practice_sessions_user_status_idx').on(t.userId, t.status),
+  ]
+);
+
+export const practiceQuestions = pgTable(
+  'practice_questions',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+    order: integer('order').notNull().default(0),
+    questionKey: text('question_key').notNull(),
+    question: text('question').notNull(),
+    type: text('type', { enum: ['behavioral', 'project', 'hr', 'system_design'] }).notNull(),
+    dimension: text('dimension'),
+    difficulty: text('difficulty', { enum: ['standard', 'easy', 'hard'] }).notNull().default('standard'),
+    basis: jsonb('basis').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    maxFollowUps: integer('max_follow_ups').notNull().default(2),
+    skipped: boolean('skipped').notNull().default(false),
+    regeneratedFrom: text('regenerated_from'),
+    weaknessId: text('weakness_id'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('practice_questions_user_session_order_idx').on(t.userId, t.sessionId, t.order),
+    index('practice_questions_user_key_idx').on(t.userId, t.questionKey),
+  ]
+);
+
+export const practiceAnswers = pgTable(
+  'practice_answers',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+    questionId: text('question_id').notNull(),
+    turn: integer('turn').notNull().default(0),
+    prompt: text('prompt').notNull(),
+    answer: text('answer').notNull().default(''),
+    isDraft: boolean('is_draft').notNull().default(true),
+    wordCount: integer('word_count').notNull().default(0),
+    paraCount: integer('para_count').notNull().default(0),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('practice_answers_user_question_turn_idx').on(t.userId, t.questionId, t.turn),
+    index('practice_answers_user_session_question_idx').on(t.userId, t.sessionId, t.questionId),
+  ]
+);
+
+export const practiceEvaluations = pgTable(
+  'practice_evaluations',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    answerId: text('answer_id').notNull(),
+    questionId: text('question_id').notNull(),
+    source: text('source', { enum: ['ai', 'self'] }).notNull().default('ai'),
+    status: text('status', { enum: ['generated', 'pending_retry', 'not_generated'] })
+      .notNull()
+      .default('generated'),
+    rubricVersion: text('rubric_version').notNull(),
+    promptVersion: text('prompt_version').notNull(),
+    modelId: text('model_id'),
+    dimensions: jsonb('dimensions').$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+    strengths: jsonb('strengths').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    actions: jsonb('actions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    sampleAnswer: text('sample_answer'),
+    summary: text('summary'),
+    includeInProfile: boolean('include_in_profile').notNull().default(false),
+    calibration: jsonb('calibration').$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('practice_evaluations_user_answer_idx').on(t.userId, t.answerId),
+    index('practice_evaluations_user_question_idx').on(t.userId, t.questionId),
+    index('practice_evaluations_user_rubric_idx').on(t.userId, t.rubricVersion, t.createdAt),
+  ]
+);
+
+export const practiceWeaknesses = pgTable(
+  'practice_weaknesses',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: ['dimension', 'question', 'interview_note'] }).notNull(),
+    dimension: text('dimension'),
+    questionId: text('question_id'),
+    interviewNoteId: text('interview_note_id'),
+    reason: text('reason').notNull(),
+    status: text('status', { enum: ['pending', 'practiced', 'resolved'] }).notNull().default('pending'),
+    lastPracticeAt: timestamp('last_practice_at', { withTimezone: true }),
+    lastLevel: integer('last_level'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('practice_weaknesses_user_status_idx').on(t.userId, t.status),
+    index('practice_weaknesses_user_dim_status_idx').on(t.userId, t.dimension, t.status),
+  ]
+);
+
 export const schema = {
   users,
   sessions,
@@ -634,6 +793,11 @@ export const schema = {
   aiConfigs,
   aiUsage,
   syncState,
+  practiceSessions,
+  practiceQuestions,
+  practiceAnswers,
+  practiceEvaluations,
+  practiceWeaknesses,
 };
 
 export type UserRow = typeof users.$inferSelect;
@@ -648,3 +812,8 @@ export type AttachmentRow = typeof attachments.$inferSelect;
 export type ChangeLogRow = typeof changeLog.$inferSelect;
 export type ConflictSnapshotRow = typeof conflictSnapshots.$inferSelect;
 export type TrackerChatEventRow = typeof trackerChatEvents.$inferSelect;
+export type PracticeSessionRow = typeof practiceSessions.$inferSelect;
+export type PracticeQuestionRow = typeof practiceQuestions.$inferSelect;
+export type PracticeAnswerRow = typeof practiceAnswers.$inferSelect;
+export type PracticeEvaluationRow = typeof practiceEvaluations.$inferSelect;
+export type PracticeWeaknessRow = typeof practiceWeaknesses.$inferSelect;

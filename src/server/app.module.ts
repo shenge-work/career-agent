@@ -8,6 +8,7 @@ import { CollectModule } from './collect/collect.module';
 import { DbModule } from './db/db.module';
 import { InterviewModule } from './interview/interview.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { PracticeModule } from './practice/practice.module';
 import { ReferralModule } from './referral/referral.module';
 import { RenderModule } from './render/render.module';
 import { ResumesModule } from './resumes/resumes.module';
@@ -29,6 +30,7 @@ import { UsersModule } from './users/users.module';
     CollectModule,
     PortfolioModule,
     InterviewModule,
+    PracticeModule,
     ReferralModule,
     SetupModule,
     SyncModule,

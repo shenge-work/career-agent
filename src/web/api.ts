@@ -389,6 +389,239 @@ export interface KbAskResult {
   hitCount: number;
 }
 
+/** N14 · AI 面试练习：会话 / 题目 / 回答 / 评分 / 弱项。 */
+export type PracticeSessionStatus = 'configuring' | 'active' | 'paused' | 'completed';
+export type PracticeQuestionType = 'behavioral' | 'project' | 'hr' | 'system_design';
+export type PracticeDifficulty = 'easy' | 'standard' | 'hard';
+
+export interface PracticeSession {
+  id: string;
+  status: PracticeSessionStatus;
+  applicationId: string | null;
+  resumeId: string | null;
+  goal: Record<string, any>;
+  currentQuestionOrder: number;
+  usage: Record<string, any>;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  questions?: PracticeQuestion[];
+}
+
+export interface PracticeQuestion {
+  id: string;
+  sessionId: string;
+  order: number;
+  questionKey: string;
+  question: string;
+  type: PracticeQuestionType;
+  dimension: string | null;
+  difficulty: PracticeDifficulty;
+  basis: Record<string, any>;
+  maxFollowUps: number;
+  skipped: boolean;
+  regeneratedFrom: string | null;
+  weaknessId: string | null;
+  createdAt: string;
+  answers?: PracticeAnswer[];
+  evaluations?: PracticeEvaluation[];
+}
+
+export interface PracticeAnswer {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  turn: number;
+  prompt: string;
+  answer: string;
+  isDraft: boolean;
+  wordCount: number;
+  paraCount: number;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PracticeDimensionScore {
+  dimension: string;
+  level: number;
+  reason?: string;
+  evidence?: string;
+}
+
+export interface PracticeEvaluation {
+  id: string;
+  answerId: string;
+  questionId: string;
+  source: 'ai' | 'self';
+  status: 'generated' | 'pending_retry' | 'not_generated';
+  rubricVersion: string;
+  promptVersion: string;
+  modelId: string | null;
+  dimensions: PracticeDimensionScore[];
+  strengths: string[];
+  actions: string[];
+  sampleAnswer: string | null;
+  summary: string | null;
+  includeInProfile: boolean;
+  calibration: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface PracticeWeakness {
+  id: string;
+  source: 'dimension' | 'question' | 'interview_note';
+  dimension: string | null;
+  questionId: string | null;
+  interviewNoteId: string | null;
+  reason: string;
+  status: 'pending' | 'practiced' | 'resolved';
+  lastPracticeAt: string | null;
+  lastLevel: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GenerateQuestionsResult {
+  sessionId: string;
+  questions: PracticeQuestion[];
+  aiUsed: boolean;
+  model: string | null;
+  degraded: boolean;
+}
+
+export interface PracticeScoreResult {
+  evaluation: PracticeEvaluation;
+  aiUsed: boolean;
+  model: string | null;
+  degraded: boolean;
+  notGenerated?: boolean;
+  pendingRetry?: boolean;
+}
+
+export interface SubmitFirstAnswerResult extends PracticeScoreResult {
+  answer: PracticeAnswer;
+}
+
+export interface PracticeFollowUpResult {
+  answer: PracticeAnswer | null;
+  enough: boolean;
+  target: string;
+  aiUsed: boolean;
+  model: string | null;
+  degraded: boolean;
+}
+
+export interface PracticeSampleAnswerResult {
+  sampleAnswer: string;
+  basedOn: string;
+  aiUsed: boolean;
+  model: string | null;
+  degraded: boolean;
+}
+
+export interface PracticeRetryResult {
+  session: PracticeSession;
+  question: PracticeQuestion;
+}
+
+export interface PracticeSettleResult {
+  session: PracticeSession;
+  weaknesses: PracticeWeakness[];
+  profile: Record<string, any>;
+}
+
+export interface GrowthResult {
+  rubricVersions: string[];
+  profile: Record<string, { latest: number | null; count: number; history: Array<{ level: number; at: string; rubricVersion: string }> }>;
+  trend: Record<string, Array<{ level: number; at: string }>>;
+  radar: { first: Record<string, number | null>; recent: Record<string, number | null> };
+  calendar: { days: string[]; totalDays: number };
+  milestones: string[];
+  sameQuestion: Array<{
+    questionKey: string;
+    question: string;
+    attempts: Array<{ questionId: string; answer: string; submittedAt: string | null; levels: PracticeDimensionScore[] }>;
+  }>;
+}
+
+export const listPracticeSessions = () => api<PracticeSession[]>('/practice/sessions');
+
+export const getPracticeSession = (id: string) =>
+  api<PracticeSession>(`/practice/sessions/${encodeURIComponent(id)}`);
+
+export const createPracticeSession = (body: {
+  applicationId?: string | null;
+  resumeId?: string | null;
+  jdText?: string;
+  questionType?: string;
+  difficulty?: string;
+  questionCount?: number;
+}) => post<PracticeSession>('/practice/sessions', body);
+
+export const updatePracticeSessionStatus = (id: string, status: string) =>
+  put<PracticeSession>(`/practice/sessions/${encodeURIComponent(id)}/status`, { status });
+
+export const generatePracticeQuestions = (sessionId: string, count?: number) =>
+  post<GenerateQuestionsResult>(`/practice/sessions/${encodeURIComponent(sessionId)}/questions/generate`, {
+    ...(count ? { count } : {}),
+  });
+
+export const practiceFollowUp = (questionId: string, answerId: string) =>
+  post<PracticeFollowUpResult>(`/practice/questions/${encodeURIComponent(questionId)}/follow-up`, { answerId });
+
+export const submitFirstAnswer = (questionId: string, answer: string) =>
+  post<SubmitFirstAnswerResult>(`/practice/questions/${encodeURIComponent(questionId)}/answers`, { answer });
+
+export const retryPracticeQuestion = (questionId: string) =>
+  post<PracticeRetryResult>(`/practice/questions/${encodeURIComponent(questionId)}/retry`);
+
+export const savePracticeDraft = (answerId: string, answer: string) =>
+  put<PracticeAnswer>(`/practice/answers/${encodeURIComponent(answerId)}/draft`, { answer });
+
+export const submitPracticeAnswer = (answerId: string, answer?: string) =>
+  post<PracticeAnswer>(`/practice/answers/${encodeURIComponent(answerId)}/submit`, { ...(answer !== undefined ? { answer } : {}) });
+
+export const evaluatePracticeAnswer = (answerId: string) =>
+  post<PracticeScoreResult>(`/practice/answers/${encodeURIComponent(answerId)}/evaluate`);
+
+export const selfEvaluatePracticeAnswer = (
+  answerId: string,
+  dimensions: Array<{ dimension: string; level: number }>
+) => post<PracticeEvaluation>(`/practice/answers/${encodeURIComponent(answerId)}/self-evaluate`, { dimensions });
+
+export const practiceSampleAnswer = (answerId: string) =>
+  post<PracticeSampleAnswerResult>(`/practice/answers/${encodeURIComponent(answerId)}/sample-answer`);
+
+export const getPracticeGrowth = (query?: { rubricVersion?: string; from?: string; to?: string }) => {
+  const qs = new URLSearchParams();
+  if (query?.rubricVersion) qs.set('rubricVersion', query.rubricVersion);
+  if (query?.from) qs.set('from', query.from);
+  if (query?.to) qs.set('to', query.to);
+  const s = qs.toString();
+  return api<GrowthResult>(`/practice/growth${s ? '?' + s : ''}`);
+};
+
+export const listPracticeWeaknesses = () => api<PracticeWeakness[]>('/practice/weaknesses');
+
+export const createPracticeWeakness = (body: {
+  source: string;
+  dimension?: string | null;
+  questionId?: string | null;
+  interviewNoteId?: string | null;
+  reason: string;
+}) => post<PracticeWeakness>('/practice/weaknesses', body);
+
+export const updatePracticeWeaknessStatus = (id: string, status: string) =>
+  put<PracticeWeakness>(`/practice/weaknesses/${encodeURIComponent(id)}/status`, { status });
+
+export const settlePracticeSession = (sessionId: string) =>
+  post<PracticeSettleResult>(`/practice/sessions/${encodeURIComponent(sessionId)}/settle`);
+
+export const exportPracticeKb = (sessionId: string, body: { title: string; category?: string | null; tags?: string[] }) =>
+  post<KbItem>(`/practice/sessions/${encodeURIComponent(sessionId)}/export-kb`, body);
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // 没有请求体时绝不声明 JSON Content-Type：Fastify 会对「声明了 JSON 却是空 body」
   // 的 DELETE / POST 直接回 400（Body cannot be empty），曾让「停用 AI 配置」按钮失效。

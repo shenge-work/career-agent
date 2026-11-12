@@ -1,0 +1,73 @@
+sequenceDiagram
+    autonumber
+    actor U as 求职者
+    participant W as 前端 #/interview
+    participant C as PracticeController
+    participant S as PracticeService
+    participant A as AiService.complete
+    participant D as TenantDb/PGlite
+
+    U->>W: 选岗位/简历/JD/题型/难度/题量
+    W->>C: POST /sessions
+    C->>S: createSession(userId, goal)
+    S->>D: insert practice_sessions(status=configuring)
+    S-->>W: session
+
+    W->>C: POST /sessions/:id/questions/generate
+    C->>S: generateQuestions(sessionId)
+    S->>A: complete(messages=buildQuestionsMessages(goal))
+    alt AI 可用且 JSON 校验通过
+        A-->>S: {text, model}
+        S->>D: insert practice_questions[]
+    else 无 Key / 解析失败
+        S->>S: 本地题库 fallback
+        S->>D: insert practice_questions[](basis=generic)
+    end
+    S-->>W: 第 1 题
+
+    loop 逐题
+        U->>W: 输入回答（草稿防抖保存）
+        W->>C: PUT /answers/:id/draft
+        C->>S: saveDraft()
+        S->>D: update practice_answers(is_draft=true)
+        U->>W: 提交本题
+        W->>C: POST /answers/:id/submit
+        C->>S: submitAnswer()
+        S->>D: update answer(is_draft=false, submitted_at)
+
+        opt 有限追问(≤2层, 可跳过)
+            W->>C: POST /questions/:id/follow-up
+            C->>S: generateFollowUp()
+            S->>A: complete(messages=buildFollowUpMessages(上一轮回答))
+            S->>D: insert practice_answers(turn=1, prompt=追问)
+            S-->>W: 追问文本
+            U->>W: 答追问 → 回到 submit
+        end
+
+        W->>C: POST /answers/:id/evaluate
+        C->>S: scoreAnswer()
+        S->>A: complete(messages=buildScoreMessages(rubric+答案), json_object)
+        alt 评分成功且校验通过
+            S->>D: insert practice_evaluations(status=generated, include_in_profile=true)
+            S-->>W: 反馈三件套
+        else 解析失败/超时/超长
+            S->>D: insert practice_evaluations(status=not_generated, include_in_profile=false)
+            S-->>W: 「评分没生成，答案已保留，可重试」
+        end
+    end
+
+    W->>C: POST /sessions/:id/settle
+    C->>S: settleSession()
+    S->>D: 聚合评分 → 生成弱项 practice_weaknesses
+    S-->>W: 会话完成 + 弱项清单
+
+    U->>W: 点「同题重练」
+    W->>C: POST /questions/:id/retry
+    C->>S: retryQuestion()
+    S->>D: insert practice_questions(question_key 相同, regenerated_from=旧id)
+    S-->>W: 新一轮同题
+
+    W->>C: GET /growth
+    C->>S: growth()
+    S->>D: 聚合 evaluations(rubric_version 分段)
+    S-->>W: 趋势/雷达/日历/同题对比

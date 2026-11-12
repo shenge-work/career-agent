@@ -24,6 +24,7 @@ const GROUPS: { title: string; items: { to: string; label: string; icon: string 
     title: '智能工具',
     items: [
       { to: '/ai', label: 'AI 试用台', icon: '✦' },
+      { to: '/interview', label: 'AI 面试练习', icon: '▣' },
       { to: '/kb', label: '面经库', icon: '◈' },
     ],
   },

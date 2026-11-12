@@ -15,6 +15,11 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  practiceAnswers,
+  practiceEvaluations,
+  practiceQuestions,
+  practiceSessions,
+  practiceWeaknesses,
   referrals,
   resumes,
   settings,
@@ -159,6 +164,144 @@ export interface ReferralInput {
 
 /** 内推信息允许更新的字段白名单。 */
 export type ReferralPatch = Partial<Pick<ReferralInput, 'companyId' | 'payload'>>;
+
+/** N14 · 练习会话状态。 */
+export type PracticeSessionStatus = 'configuring' | 'active' | 'paused' | 'completed';
+
+export interface PracticeSessionInput {
+  id: string;
+  status?: PracticeSessionStatus;
+  applicationId?: string | null;
+  resumeId?: string | null;
+  goal?: Record<string, unknown>;
+  currentQuestionOrder?: number;
+  usage?: Record<string, unknown>;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+}
+
+export type PracticeSessionPatch = Partial<
+  Pick<
+    PracticeSessionInput,
+    | 'status'
+    | 'applicationId'
+    | 'resumeId'
+    | 'goal'
+    | 'currentQuestionOrder'
+    | 'usage'
+    | 'startedAt'
+    | 'completedAt'
+  >
+>;
+
+export interface PracticeQuestionInput {
+  id: string;
+  sessionId: string;
+  order?: number;
+  questionKey: string;
+  question: string;
+  type: 'behavioral' | 'project' | 'hr' | 'system_design';
+  dimension?: string | null;
+  difficulty?: 'standard' | 'easy' | 'hard';
+  basis?: Record<string, unknown>;
+  maxFollowUps?: number;
+  skipped?: boolean;
+  regeneratedFrom?: string | null;
+  weaknessId?: string | null;
+}
+
+export type PracticeQuestionPatch = Partial<
+  Pick<
+    PracticeQuestionInput,
+    | 'sessionId'
+    | 'order'
+    | 'questionKey'
+    | 'question'
+    | 'type'
+    | 'dimension'
+    | 'difficulty'
+    | 'basis'
+    | 'maxFollowUps'
+    | 'skipped'
+    | 'regeneratedFrom'
+    | 'weaknessId'
+  >
+>;
+
+export interface PracticeAnswerInput {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  turn?: number;
+  prompt: string;
+  answer?: string;
+  isDraft?: boolean;
+  wordCount?: number;
+  paraCount?: number;
+  submittedAt?: Date | null;
+}
+
+export type PracticeAnswerPatch = Partial<
+  Pick<
+    PracticeAnswerInput,
+    'sessionId' | 'questionId' | 'turn' | 'prompt' | 'answer' | 'isDraft' | 'wordCount' | 'paraCount' | 'submittedAt'
+  >
+>;
+
+export interface PracticeEvaluationInput {
+  id: string;
+  answerId: string;
+  questionId: string;
+  source?: 'ai' | 'self';
+  status?: 'generated' | 'pending_retry' | 'not_generated';
+  rubricVersion: string;
+  promptVersion: string;
+  modelId?: string | null;
+  dimensions?: unknown[];
+  strengths?: string[];
+  actions?: string[];
+  sampleAnswer?: string | null;
+  summary?: string | null;
+  includeInProfile?: boolean;
+  calibration?: Record<string, unknown> | null;
+}
+
+export type PracticeEvaluationPatch = Partial<
+  Pick<
+    PracticeEvaluationInput,
+    | 'source'
+    | 'status'
+    | 'rubricVersion'
+    | 'promptVersion'
+    | 'modelId'
+    | 'dimensions'
+    | 'strengths'
+    | 'actions'
+    | 'sampleAnswer'
+    | 'summary'
+    | 'includeInProfile'
+    | 'calibration'
+  >
+>;
+
+export interface PracticeWeaknessInput {
+  id: string;
+  source: 'dimension' | 'question' | 'interview_note';
+  dimension?: string | null;
+  questionId?: string | null;
+  interviewNoteId?: string | null;
+  reason: string;
+  status?: 'pending' | 'practiced' | 'resolved';
+  lastPracticeAt?: Date | null;
+  lastLevel?: number | null;
+}
+
+export type PracticeWeaknessPatch = Partial<
+  Pick<
+    PracticeWeaknessInput,
+    'source' | 'dimension' | 'questionId' | 'interviewNoteId' | 'reason' | 'status' | 'lastPracticeAt' | 'lastLevel'
+  >
+>;
 
 /**
  * 行级隔离的唯一入口。
@@ -653,6 +796,235 @@ export class TenantDb {
           .orderBy(desc(interviewKb.updatedAt))
           .limit(limitN);
       },
+
+      // ------------------------------------------------------ 练习会话
+      listPracticeSessions: () =>
+        db
+          .select()
+          .from(practiceSessions)
+          .where(active(practiceSessions))
+          .orderBy(desc(practiceSessions.updatedAt)),
+
+      getPracticeSession: (id: string) =>
+        db
+          .select()
+          .from(practiceSessions)
+          .where(active(practiceSessions, eq(practiceSessions.id, id)))
+          .limit(1),
+
+      createPracticeSession: (input: PracticeSessionInput) =>
+        revive(practiceSessions, {
+          id: input.id,
+          userId,
+          status: input.status || 'configuring',
+          applicationId: input.applicationId ?? null,
+          resumeId: input.resumeId ?? null,
+          goal: input.goal ?? {},
+          currentQuestionOrder: input.currentQuestionOrder ?? 0,
+          usage: input.usage ?? {},
+          startedAt: input.startedAt ?? null,
+          completedAt: input.completedAt ?? null,
+        }),
+
+      updatePracticeSession: (id: string, patch: PracticeSessionPatch) =>
+        db
+          .update(practiceSessions)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(practiceSessions, eq(practiceSessions.id, id)))
+          .returning(),
+
+      deletePracticeSession: (id: string) => softDelete(practiceSessions, practiceSessions.id, id),
+
+      // ------------------------------------------------------ 练习题目
+      listPracticeQuestions: (sessionId: string) =>
+        db
+          .select()
+          .from(practiceQuestions)
+          .where(active(practiceQuestions, eq(practiceQuestions.sessionId, sessionId)))
+          .orderBy(asc(practiceQuestions.order)),
+
+      listPracticeQuestionsByKey: (questionKey: string) =>
+        db
+          .select()
+          .from(practiceQuestions)
+          .where(active(practiceQuestions, eq(practiceQuestions.questionKey, questionKey)))
+          .orderBy(asc(practiceQuestions.createdAt)),
+
+      listAllPracticeQuestions: () =>
+        db
+          .select()
+          .from(practiceQuestions)
+          .where(active(practiceQuestions))
+          .orderBy(asc(practiceQuestions.createdAt)),
+
+      getPracticeQuestion: (id: string) =>
+        db
+          .select()
+          .from(practiceQuestions)
+          .where(active(practiceQuestions, eq(practiceQuestions.id, id)))
+          .limit(1),
+
+      createPracticeQuestion: (input: PracticeQuestionInput) =>
+        revive(practiceQuestions, {
+          id: input.id,
+          userId,
+          sessionId: input.sessionId,
+          order: input.order ?? 0,
+          questionKey: input.questionKey,
+          question: input.question,
+          type: input.type,
+          dimension: input.dimension ?? null,
+          difficulty: input.difficulty ?? 'standard',
+          basis: input.basis ?? {},
+          maxFollowUps: input.maxFollowUps ?? 2,
+          skipped: input.skipped ?? false,
+          regeneratedFrom: input.regeneratedFrom ?? null,
+          weaknessId: input.weaknessId ?? null,
+        }),
+
+      updatePracticeQuestion: (id: string, patch: PracticeQuestionPatch) =>
+        db
+          .update(practiceQuestions)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(practiceQuestions, eq(practiceQuestions.id, id)))
+          .returning(),
+
+      deletePracticeQuestion: (id: string) => softDelete(practiceQuestions, practiceQuestions.id, id),
+
+      // ------------------------------------------------------ 练习回答
+      listPracticeAnswers: (questionId: string) =>
+        db
+          .select()
+          .from(practiceAnswers)
+          .where(active(practiceAnswers, eq(practiceAnswers.questionId, questionId)))
+          .orderBy(asc(practiceAnswers.turn)),
+
+      listPracticeAnswersForSession: (sessionId: string) =>
+        db
+          .select()
+          .from(practiceAnswers)
+          .where(active(practiceAnswers, eq(practiceAnswers.sessionId, sessionId)))
+          .orderBy(asc(practiceAnswers.turn)),
+
+      getPracticeAnswer: (id: string) =>
+        db
+          .select()
+          .from(practiceAnswers)
+          .where(active(practiceAnswers, eq(practiceAnswers.id, id)))
+          .limit(1),
+
+      createPracticeAnswer: (input: PracticeAnswerInput) =>
+        revive(practiceAnswers, {
+          id: input.id,
+          userId,
+          sessionId: input.sessionId,
+          questionId: input.questionId,
+          turn: input.turn ?? 0,
+          prompt: input.prompt,
+          answer: input.answer ?? '',
+          isDraft: input.isDraft ?? true,
+          wordCount: input.wordCount ?? 0,
+          paraCount: input.paraCount ?? 0,
+          submittedAt: input.submittedAt ?? null,
+        }),
+
+      updatePracticeAnswer: (id: string, patch: PracticeAnswerPatch) =>
+        db
+          .update(practiceAnswers)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(practiceAnswers, eq(practiceAnswers.id, id)))
+          .returning(),
+
+      deletePracticeAnswer: (id: string) => softDelete(practiceAnswers, practiceAnswers.id, id),
+
+      // ------------------------------------------------------ 练习评分
+      listPracticeEvaluations: (answerId: string) =>
+        db
+          .select()
+          .from(practiceEvaluations)
+          .where(active(practiceEvaluations, eq(practiceEvaluations.answerId, answerId)))
+          .orderBy(asc(practiceEvaluations.createdAt)),
+
+      listAllPracticeEvaluations: () =>
+        db
+          .select()
+          .from(practiceEvaluations)
+          .where(active(practiceEvaluations))
+          .orderBy(asc(practiceEvaluations.createdAt)),
+
+      getPracticeEvaluation: (id: string) =>
+        db
+          .select()
+          .from(practiceEvaluations)
+          .where(active(practiceEvaluations, eq(practiceEvaluations.id, id)))
+          .limit(1),
+
+      createPracticeEvaluation: (input: PracticeEvaluationInput) =>
+        revive(practiceEvaluations, {
+          id: input.id,
+          userId,
+          answerId: input.answerId,
+          questionId: input.questionId,
+          source: input.source ?? 'ai',
+          status: input.status ?? 'generated',
+          rubricVersion: input.rubricVersion,
+          promptVersion: input.promptVersion,
+          modelId: input.modelId ?? null,
+          dimensions: input.dimensions ?? [],
+          strengths: input.strengths ?? [],
+          actions: input.actions ?? [],
+          sampleAnswer: input.sampleAnswer ?? null,
+          summary: input.summary ?? null,
+          includeInProfile: input.includeInProfile ?? false,
+          calibration: input.calibration ?? null,
+        }),
+
+      updatePracticeEvaluation: (id: string, patch: PracticeEvaluationPatch) =>
+        db
+          .update(practiceEvaluations)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(practiceEvaluations, eq(practiceEvaluations.id, id)))
+          .returning(),
+
+      deletePracticeEvaluation: (id: string) => softDelete(practiceEvaluations, practiceEvaluations.id, id),
+
+      // ------------------------------------------------------ 练习弱项
+      listPracticeWeaknesses: () =>
+        db
+          .select()
+          .from(practiceWeaknesses)
+          .where(active(practiceWeaknesses))
+          .orderBy(asc(practiceWeaknesses.status), desc(practiceWeaknesses.updatedAt)),
+
+      getPracticeWeakness: (id: string) =>
+        db
+          .select()
+          .from(practiceWeaknesses)
+          .where(active(practiceWeaknesses, eq(practiceWeaknesses.id, id)))
+          .limit(1),
+
+      createPracticeWeakness: (input: PracticeWeaknessInput) =>
+        revive(practiceWeaknesses, {
+          id: input.id,
+          userId,
+          source: input.source,
+          dimension: input.dimension ?? null,
+          questionId: input.questionId ?? null,
+          interviewNoteId: input.interviewNoteId ?? null,
+          reason: input.reason,
+          status: input.status ?? 'pending',
+          lastPracticeAt: input.lastPracticeAt ?? null,
+          lastLevel: input.lastLevel ?? null,
+        }),
+
+      updatePracticeWeakness: (id: string, patch: PracticeWeaknessPatch) =>
+        db
+          .update(practiceWeaknesses)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(practiceWeaknesses, eq(practiceWeaknesses.id, id)))
+          .returning(),
+
+      deletePracticeWeakness: (id: string) => softDelete(practiceWeaknesses, practiceWeaknesses.id, id),
 
       // ------------------------------------------------------------ 设置
       getSettings: () =>

@@ -11,6 +11,11 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  practiceAnswers,
+  practiceEvaluations,
+  practiceQuestions,
+  practiceSessions,
+  practiceWeaknesses,
   referrals,
   resumes,
   syncState,
@@ -39,7 +44,7 @@ import {
  * 一次 syncOnce = pull → push → GC，三个阶段各自独立推进游标，中断可续：
  *   · pull  —— 按云端 seq 拉增量，openEvent 解密后走 applyRemoteUpsert 回灌
  *              （withSyncImport 窗口内保留远端 hlc、吞掉 change_log 防回环）；
- *   · push  —— pushedCursor 为空 = 首次：把 10 张同步表的当前活跃行做基线全量首传；
+ *   · push  —— pushedCursor 为空 = 首次：把 15 张同步表的当前活跃行做基线全量首传；
  *              否则读 change_log 增量，按 entity/entityId 读完整行快照再封包上云；
  *   · GC    —— 本地 blob 按引用集清理；云端 blob 按 knownBlobs 比对引用集删除。
  *
@@ -51,7 +56,7 @@ import {
  * 本机这批事件，不会被跳过遗漏其他设备的变更。
  */
 
-/** 10 张参与同步的表：9 张可变实体 + attachments。entity 名 = change_log.entity = 表名。 */
+/** 15 张参与同步的表：14 张可变实体 + attachments。entity 名 = change_log.entity = 表名。 */
 const SYNCED_TABLES: Record<string, any> = {
   resumes,
   companies,
@@ -62,6 +67,11 @@ const SYNCED_TABLES: Record<string, any> = {
   portfolios,
   interview_notes: interviewNotes,
   interview_kb: interviewKb,
+  practice_sessions: practiceSessions,
+  practice_questions: practiceQuestions,
+  practice_answers: practiceAnswers,
+  practice_evaluations: practiceEvaluations,
+  practice_weaknesses: practiceWeaknesses,
   attachments,
 };
 
@@ -72,6 +82,10 @@ const TIMESTAMP_KEYS = new Set([
   'updatedAt',
   'appliedAt',
   'interviewAt',
+  'startedAt',
+  'completedAt',
+  'submittedAt',
+  'lastPracticeAt',
 ]);
 
 const PULL_BATCH = 200;
@@ -222,7 +236,7 @@ export class SyncEngine {
 
   // ------------------------------------------------------------ push：基线 / 增量
 
-  /** 首次启用：把 10 张表当前全部活跃行推上去（墓碑行不推，远端从零开始不需要历史）。 */
+  /** 首次启用：把 15 张表当前全部活跃行推上去（墓碑行不推，远端从零开始不需要历史）。 */
   private async baselinePush(userId: string, stats: SyncStats): Promise<void> {
     for (const entity of Object.keys(SYNCED_TABLES)) {
       const table = SYNCED_TABLES[entity];

@@ -1,0 +1,107 @@
+classDiagram
+    class PracticeSession {
+        +string id
+        +uuid userId
+        +string status
+        +string applicationId
+        +string resumeId
+        +jsonb goal
+        +int currentQuestionOrder
+        +jsonb usage
+        +timestamp startedAt
+        +timestamp completedAt
+        +createSession()
+        +updateStatus()
+    }
+
+    class PracticeQuestion {
+        +string id
+        +uuid userId
+        +string sessionId
+        +int order
+        +string questionKey
+        +string question
+        +string type
+        +string dimension
+        +string difficulty
+        +jsonb basis
+        +int maxFollowUps
+        +bool skipped
+        +string regeneratedFrom
+        +string weaknessId
+    }
+
+    class PracticeAnswer {
+        +string id
+        +uuid userId
+        +string sessionId
+        +string questionId
+        +int turn
+        +string prompt
+        +string answer
+        +bool isDraft
+        +int wordCount
+        +int paraCount
+        +timestamp submittedAt
+        +saveDraft()
+        +submit()
+    }
+
+    class PracticeEvaluation {
+        +string id
+        +uuid userId
+        +string answerId
+        +string questionId
+        +string source
+        +string status
+        +string rubricVersion
+        +string promptVersion
+        +string modelId
+        +jsonb dimensions
+        +jsonb strengths
+        +jsonb actions
+        +string sampleAnswer
+        +string summary
+        +bool includeInProfile
+        +jsonb calibration
+    }
+
+    class PracticeWeakness {
+        +string id
+        +uuid userId
+        +string source
+        +string dimension
+        +string questionId
+        +string interviewNoteId
+        +string reason
+        +string status
+        +timestamp lastPracticeAt
+        +int lastLevel
+        +updateStatus()
+    }
+
+    class PracticeService {
+        +createSession()
+        +generateQuestions()
+        +generateFollowUp()
+        +saveDraft()
+        +submitAnswer()
+        +scoreAnswer()
+        +selfEvaluate()
+        +generateSampleAnswer()
+        +retryQuestion()
+        +settleSession()
+        +growth()
+        +exportToKb()
+    }
+
+    PracticeSession "1" *-- "N" PracticeQuestion : contains
+    PracticeQuestion "1" *-- "N" PracticeAnswer : has
+    PracticeAnswer "1" *-- "N" PracticeEvaluation : scored_by
+    PracticeQuestion "N" o-- "1" PracticeWeakness : targets
+    PracticeQuestion "N" o-- "N" PracticeQuestion : regeneratedFrom
+    PracticeService ..> PracticeSession : orchestrates
+    PracticeService ..> PracticeQuestion : orchestrates
+    PracticeService ..> PracticeAnswer : orchestrates
+    PracticeService ..> PracticeEvaluation : orchestrates
+    PracticeService ..> PracticeWeakness : orchestrates

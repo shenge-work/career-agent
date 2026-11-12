@@ -6,6 +6,11 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  practiceAnswers,
+  practiceEvaluations,
+  practiceQuestions,
+  practiceSessions,
+  practiceWeaknesses,
   referrals,
   resumes,
   tracker,
@@ -19,7 +24,7 @@ import {
  * hlc / device_id / deleted_at 写回去 —— 恢复是一次新的本地写，时钟必须由
  * BEFORE 守卫重新领号并写 change_log，否则云端会把它当成过期变更直接拒收。
  *
- * 只开放 9 张「有 (user_id,id) 复合主键、支持软删除」的可变实体表；
+ * 只开放 14 张「有 (user_id,id) 复合主键、支持软删除」的可变实体表；
  * versions / application_events / settings / ai_configs 是流水或单例，
  * 没有可安全覆盖的行身份，交给人工处理（前端禁用恢复按钮）。
  */
@@ -33,6 +38,11 @@ export const RESTORABLE_TABLES = {
   portfolios,
   interview_notes: interviewNotes,
   interview_kb: interviewKb,
+  practice_sessions: practiceSessions,
+  practice_questions: practiceQuestions,
+  practice_answers: practiceAnswers,
+  practice_evaluations: practiceEvaluations,
+  practice_weaknesses: practiceWeaknesses,
 } as const;
 export type RestorableEntity = keyof typeof RESTORABLE_TABLES;
 

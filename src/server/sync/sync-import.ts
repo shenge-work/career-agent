@@ -7,6 +7,11 @@ import {
   interviewKb,
   interviewNotes,
   portfolios,
+  practiceAnswers,
+  practiceEvaluations,
+  practiceQuestions,
+  practiceSessions,
+  practiceWeaknesses,
   referrals,
   resumes,
   tracker,
@@ -28,7 +33,7 @@ import {
  * 只是把「远端一行变更如何安全落进本地」这条最难的路径先固化并可测试。
  */
 
-/** 9 张可变实体表；流水/快照/单例配置表有各自的写入路径，不走远端 upsert。 */
+/** 14 张可变实体表；流水/快照/单例配置表有各自的写入路径，不走远端 upsert。 */
 export const SYNC_TABLES = {
   resumes,
   companies,
@@ -39,6 +44,12 @@ export const SYNC_TABLES = {
   portfolios,
   interviewNotes,
   interviewKb,
+  // 键名必须与 change_log.entity（= 数据库表名）一致，applyRemoteUpsert 才能查表。
+  practice_sessions: practiceSessions,
+  practice_questions: practiceQuestions,
+  practice_answers: practiceAnswers,
+  practice_evaluations: practiceEvaluations,
+  practice_weaknesses: practiceWeaknesses,
 } as const;
 export type SyncEntity = keyof typeof SYNC_TABLES;
 

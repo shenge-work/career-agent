@@ -1,0 +1,454 @@
+/* =============================================================
+ * N14 · AI 面试练习页面样式（严格黑白灰，零彩色）。
+ * 只允许灰阶 hex / rgba(hsla 灰阶)；状态区分用灰阶深浅 + 线型 + 加粗。
+ * 禁止引用 --accent / --success / --danger / --brand-text 等彩色 token。
+ * ============================================================= */
+
+.iv-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  color: #1a1a1a;
+}
+
+.iv-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.iv-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #1a1a1a;
+}
+.iv-sub {
+  margin: 2px 0 0;
+  color: #777;
+  font-size: 12px;
+}
+
+.iv-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.iv-card h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.iv-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.iv-row + .iv-row {
+  margin-top: 10px;
+}
+
+.iv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+}
+.iv-field select,
+.iv-field input,
+.iv-field textarea {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  color: #1a1a1a;
+  background: #fff;
+  min-width: 140px;
+}
+.iv-field textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+}
+
+.iv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #1a1a1a;
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.iv-btn:hover {
+  background: #333;
+  border-color: #333;
+}
+.iv-btn:disabled {
+  background: #ccc;
+  border-color: #ccc;
+  color: #fff;
+  cursor: not-allowed;
+}
+.iv-btn.ghost {
+  background: #fff;
+  color: #1a1a1a;
+}
+.iv-btn.ghost:hover {
+  background: #f5f5f5;
+}
+.iv-btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.iv-hint {
+  background: #f5f5f5;
+  border: 1px dashed #ccc;
+  color: #555;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.iv-alert {
+  background: #f5f5f5;
+  border: 1px solid #999;
+  color: #333;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.iv-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  margin: 0 0 8px;
+  letter-spacing: 0.04em;
+}
+
+.iv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.iv-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #ebebeb;
+  padding: 10px 0;
+  font-size: 13px;
+}
+.iv-list-item:last-child {
+  border-bottom: none;
+}
+.iv-list-main {
+  min-width: 0;
+}
+.iv-list-title {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+.iv-list-meta {
+  color: #777;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.iv-tag {
+  display: inline-block;
+  border: 1px solid #ccc;
+  color: #555;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  margin-left: 6px;
+}
+.iv-tag.dim {
+  border-style: dashed;
+  font-weight: 700;
+  color: #333;
+}
+
+.iv-empty {
+  color: #999;
+  font-size: 13px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* ---- 练习 + 反馈两栏 ---- */
+.iv-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .iv-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.iv-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.iv-progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid #999;
+  background: #fff;
+}
+.iv-progress-dot.on {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+}
+
+.iv-bubble {
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.iv-bubble.interviewer {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+.iv-bubble.me {
+  background: #fff;
+  border: 1px solid #999;
+  color: #333;
+}
+.iv-bubble-meta {
+  font-size: 11px;
+  color: #999;
+  margin: 2px 2px 6px;
+}
+
+.iv-textarea {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  background: #fff;
+  min-height: 120px;
+  resize: vertical;
+}
+.iv-textarea:disabled {
+  background: #f5f5f5;
+  color: #777;
+}
+
+.iv-draft-state {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* ---- 反馈三件套 ---- */
+.iv-feedback {
+  border-left: 3px solid #1a1a1a;
+  padding-left: 12px;
+}
+.iv-fb-block {
+  margin-bottom: 14px;
+}
+.iv-fb-block h3 {
+  font-size: 12px;
+  font-weight: 800;
+  color: #333;
+  margin: 0 0 6px;
+  letter-spacing: 0.03em;
+}
+.iv-dim-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 28px 20px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 5px 0;
+  color: #333;
+}
+.iv-dim-name {
+  font-weight: 600;
+}
+.iv-level-track {
+  height: 8px;
+  background: #ebebeb;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+.iv-level-fill {
+  background: #555;
+  height: 100%;
+}
+.iv-level-num {
+  text-align: center;
+  font-weight: 800;
+  color: #1a1a1a;
+}
+.iv-delta {
+  font-size: 11px;
+  color: #777;
+  text-align: center;
+}
+.iv-dim-reason {
+  color: #777;
+  font-size: 11px;
+  margin: -2px 0 6px 138px;
+}
+
+.iv-action-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: #333;
+  padding: 4px 0;
+}
+.iv-action-marker {
+  color: #999;
+  font-weight: 800;
+}
+
+.iv-sample {
+  background: #fafafa;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.iv-footer-note {
+  position: sticky;
+  bottom: 0;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #777;
+  margin-top: 16px;
+}
+
+/* ---- 成长页 ---- */
+.iv-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .iv-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.iv-chart {
+  width: 100%;
+  height: auto;
+}
+
+.iv-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 12px);
+  grid-auto-rows: 12px;
+  gap: 3px;
+  margin: 8px 0;
+}
+.iv-cal-cell {
+  border-radius: 3px;
+  background: #ebebeb;
+  border: 1px solid #ddd;
+}
+.iv-cal-cell.on {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+}
+
+.iv-milestone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  padding: 5px 0;
+}
+.iv-milestone-marker {
+  color: #777;
+  font-weight: 800;
+}
+
+/* ---- 同题 diff ---- */
+.iv-diff {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.iv-diff .add,
+.iv-diff .del {
+  background: #e0e0e0;
+  font-weight: 700;
+  color: #1a1a1a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.iv-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .iv-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.iv-compare-panel {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.iv-compare-panel h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #555;
+  font-weight: 700;
+}
+
+.iv-muted {
+  color: #777;
+}
+.iv-small {
+  font-size: 12px;
+}
+.iv-strong {
+  font-weight: 800;
+  color: #1a1a1a;
+}
