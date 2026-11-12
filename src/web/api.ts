@@ -311,6 +311,26 @@ export interface JdParseResult {
   };
 }
 
+/** 投递体检：/api/resumes/:id/audit 响应（三级规则检查报告）。 */
+export interface AuditItem {
+  key: string;
+  title: string;
+  level: 'ok' | 'warn' | 'fail';
+  message: string;
+  detail?: string[];
+}
+
+export interface AuditReport {
+  checkedAt: number;
+  score: number;
+  items: AuditItem[];
+  summary: { ok: number; warn: number; fail: number };
+}
+
+/** 投递体检：传 draftPayload 可体检未保存的草稿，缺省用已保存内容。 */
+export const auditResume = (id: string, draftPayload?: unknown) =>
+  post<AuditReport>(`/resumes/${encodeURIComponent(id)}/audit`, { ...(draftPayload != null ? { payload: draftPayload } : {}) });
+
 /** N12 · 规则层匹配分析（与 jd.service.ts 的 analyze 同构）。 */
 export interface JdMatchResult {
   stats: { total: number; covered: number; weak: number; missing: number; score: number };

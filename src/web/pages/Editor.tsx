@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { api, exportTextUrl, pdfUrl, post, put, type ResumeItem } from '../api';
+import { api, auditResume, exportTextUrl, pdfUrl, post, put, type AuditReport, type ResumeItem } from '../api';
 import ConfirmModal from '../components/ConfirmModal';
 
 /** 点击外部关闭下拉菜单的通用 hook：返回 ref 与开关，供主题/格式/新增板块菜单复用。 */
@@ -712,6 +712,17 @@ export default function Editor() {
   const themesMenu = useDismissible(false);
   const formatsMenu = useDismissible(false);
   const [showHint, setShowHint] = useState(false);
+  // 投递体检：体检报告弹窗
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
+  const auditM = useMutation({
+    mutationFn: () => auditResume(id, draft),
+    onSuccess: (r) => {
+      setAuditReport(r);
+      setAuditOpen(true);
+    },
+    onError: (e) => setError((e as Error).message),
+  });
   // P0-4：A4 预览自适应宽度（默认「适应宽度」，可按需切「实际大小」）。
   const [fitMode, setFitMode] = useState<'fit' | 'full'>('fit');
   const [previewScale, setPreviewScale] = useState(1);
@@ -1022,6 +1033,14 @@ export default function Editor() {
             )}
           </div>
 
+          <button
+            className="ghost mini"
+            onClick={() => auditM.mutate()}
+            disabled={auditM.isPending}
+          >
+            {auditM.isPending ? '体检中…' : '体检'}
+          </button>
+
           <div className="menu-wrap" ref={formatsMenu.ref}>
             <button className="ghost mini" onClick={() => formatsMenu.setOpen((v) => !v)}>
               导出 ▾
@@ -1148,6 +1167,47 @@ export default function Editor() {
           </div>
         </aside>
       </div>
+
+      {auditOpen && auditReport && (
+        <div className="modal-backdrop" onClick={() => setAuditOpen(false)}>
+          <div className="modal audit-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="audit-head">
+              <h2>投递体检</h2>
+              <div className="audit-score" data-level={auditReport.score >= 80 ? 'ok' : auditReport.score >= 60 ? 'warn' : 'fail'}>
+                <span className="audit-score-num">{auditReport.score}</span>
+                <span className="audit-score-label">综合分</span>
+              </div>
+            </div>
+            <div className="audit-summary muted small">
+              通过 {auditReport.summary.ok} · 警告 {auditReport.summary.warn} · 问题 {auditReport.summary.fail}
+            </div>
+            <ul className="audit-list">
+              {auditReport.items.map((it) => (
+                <li key={it.key} className={'audit-item level-' + it.level}>
+                  <span className={'audit-dot level-' + it.level} aria-hidden />
+                  <div className="audit-item-body">
+                    <div className="audit-item-title">
+                      {it.title}
+                      <span className={'audit-tag level-' + it.level}>
+                        {it.level === 'ok' ? '通过' : it.level === 'warn' ? '建议' : '问题'}
+                      </span>
+                    </div>
+                    <div className="muted small">{it.message}</div>
+                    {it.detail && it.detail.length > 0 && (
+                      <ul className="audit-detail">
+                        {it.detail.map((d, i) => <li key={i}>{d}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="mini" onClick={() => setAuditOpen(false)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -25,6 +25,15 @@ export class JdController {
     return this.biz.analyzeJd(user.id, id, String(body?.jdText ?? body?.jd ?? ''));
   }
 
+  @Post(':id/audit')
+  audit(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Body() body: any
+  ) {
+    return this.biz.auditResume(user.id, id, body?.payload);
+  }
+
   @Post(':id/jd-derive')
   derive(
     @CurrentUser() user: CurrentUserType,

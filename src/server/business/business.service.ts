@@ -5,6 +5,7 @@ import type { ApplicationInput, ApplicationPatch, ApplicationStatus } from '../t
 import { selectVersionIdsToKeep } from './version-policy';
 import { analyze, buildDerivedPayload, deriveTitle, extractTerms } from './jd.service';
 import { allThemes, applyThemeToPayload, getTheme, themeList } from './theme.service';
+import { auditResume } from './audit.service';
 
 type Json = Record<string, unknown>;
 
@@ -225,6 +226,13 @@ export class BusinessService {
   }
 
   // ------------------------------------------------------ JD 匹配与派生
+  /** 投递体检：对某份简历做三级规则检查（只读、不联网）。可选传 payload 体检未保存的草稿。 */
+  async auditResume(userId: string, resumeId: string, draftPayload?: unknown) {
+    const resume = await this.requireResume(userId, resumeId);
+    const payload = draftPayload && typeof draftPayload === 'object' ? draftPayload : resume.payload;
+    return auditResume(payload);
+  }
+
   /** 对某份简历 + 一段 JD 文本做只读匹配分析（纯规则，不联网）。 */
   async analyzeJd(userId: string, resumeId: string, jdText: string) {
     const resume = await this.requireResume(userId, resumeId);
