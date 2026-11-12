@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../db/client';
 import {
   applications,
@@ -121,6 +121,12 @@ export class SyncEngine {
   /** 本轮 syncOnce 拉到的远端行版本；每轮开始时清空（实例非并发安全，service 层有状态门禁）。 */
   private seenRemote: Map<string, string> = new Map();
 
+  /** 本轮累积的 blob key（内存态）；syncOnce 结束时统一落一次 sync_state，避免每批都读写整行。 */
+  private blobKeysBuf: Set<string> = new Set();
+
+  /** 本轮起始时从 DB 读出的 knownBlobs，作为累积的基准。 */
+  private knownBlobsBase: string[] = [];
+
   // ------------------------------------------------------------ 状态存取
 
   async loadState(userId: string) {
@@ -147,6 +153,8 @@ export class SyncEngine {
     // 本轮拉到的远端行版本（entity:id -> rowHlc）：基线推送跳过与之完全一致的行，
     // 防止「加入设备把刚拉到的数据原样推回去」形成回声事件。
     this.seenRemote = new Map();
+    this.blobKeysBuf = new Set();
+    this.knownBlobsBase = state.knownBlobs || [];
 
     const stats: SyncStats = {
       pulled: 0,
@@ -177,6 +185,7 @@ export class SyncEngine {
       }
 
       // ---------- 3) GC ----------
+      await this.flushKnownBlobs(userId); // 先落累积的 blob key，GC 用到的引用集才完整
       stats.localBlobsGc = await this.gcLocalBlobs();
       stats.cloudBlobsGc = await this.gcCloudBlobs(userId);
 
@@ -270,12 +279,35 @@ export class SyncEngine {
         .limit(PUSH_BATCH);
       if (!changes.length) break;
 
+      // 按 entity 分组，同一张表用一次 IN(...) 批量拉行快照，避免逐条 SELECT 的 N+1。
+      const byEntity = new Map<string, typeof changeLog.$inferSelect[]>();
+      for (const change of changes) {
+        if (!SYNCED_TABLES[change.entity]) continue;
+        const list = byEntity.get(change.entity) || [];
+        list.push(change);
+        byEntity.set(change.entity, list);
+      }
+      const rowCache = new Map<string, Record<string, unknown> | null>();
+      for (const [entity, list] of byEntity) {
+        const table = SYNCED_TABLES[entity];
+        const ids = list.map((c) => c.entityId);
+        const rows = await this.db
+          .select()
+          .from(table)
+          .where(and(eq(table.userId, userId), inArray(table.id, ids)));
+        const byId = new Map(rows.map((r) => [String(r.id), r as Record<string, unknown>]));
+        for (const c of list) rowCache.set(`${entity}:${c.entityId}`, byId.get(c.entityId) || null);
+      }
+
       const events: SyncEvent[] = [];
       let lastCursor = cursor;
       for (const change of changes) {
         lastCursor = change.hlc;
-        const event = await this.changeToEvent(userId, change);
-        if (event) events.push(event);
+        const table = SYNCED_TABLES[change.entity];
+        if (!table) continue; // versions / application_events / settings / ai_configs 暂不同步
+        const row = rowCache.get(`${change.entity}:${change.entityId}`);
+        if (!row) continue; // 软删除表不该出现；防御性跳过
+        events.push(this.rowToEvent(change.entity, row, change.hlc, change.op));
       }
       if (events.length) {
         await this.pushWithRetry(userId, events, stats);
@@ -285,23 +317,6 @@ export class SyncEngine {
       await this.patchState(userId, { pushedCursor: lastCursor });
       if (changes.length < PUSH_BATCH) break;
     }
-  }
-
-  /** change_log 记录 → 完整行快照事件；行已物理消失或实体不同步返回 null。 */
-  private async changeToEvent(
-    userId: string,
-    change: typeof changeLog.$inferSelect
-  ): Promise<SyncEvent | null> {
-    const table = SYNCED_TABLES[change.entity];
-    if (!table) return null; // versions / application_events / settings / ai_configs 暂不同步
-    const rows = await this.db
-      .select()
-      .from(table)
-      .where(and(eq(table.userId, userId), eq(table.id, change.entityId)))
-      .limit(1);
-    const row = rows[0];
-    if (!row) return null; // 软删除表不该出现；防御性跳过
-    return this.rowToEvent(change.entity, row, change.hlc, change.op);
   }
 
   private rowToEvent(
@@ -381,12 +396,19 @@ export class SyncEngine {
     return true;
   }
 
-  /** 记住本机已上云 / 回灌过的 blob key，云端 GC 时比对引用集。 */
+  /** 记住本机已上云 / 回灌过的 blob key；只累积到内存，flushKnownBlobs 统一落库。 */
   private async rememberBlobKeys(userId: string, keys: string[]): Promise<void> {
-    if (!keys.length) return;
-    const state = await this.loadState(userId);
-    const merged = [...new Set([...(state?.knownBlobs || []), ...keys])];
+    void userId;
+    for (const k of keys) this.blobKeysBuf.add(k);
+  }
+
+  /** 本轮结束前把累积的 blob key 合并进 knownBlobs 并一次落库（避免每批重复读整行）。 */
+  private async flushKnownBlobs(userId: string): Promise<void> {
+    if (!this.blobKeysBuf.size) return;
+    const merged = [...new Set([...this.knownBlobsBase, ...this.blobKeysBuf])];
     await this.patchState(userId, { knownBlobs: merged });
+    this.blobKeysBuf = new Set();
+    this.knownBlobsBase = merged;
   }
 
   // ------------------------------------------------------------ 回灌
@@ -480,8 +502,8 @@ export class SyncEngine {
 
   /** 云端 GC：knownBlobs 里已无引用的 key 删除；引用集 = 本账号活跃附件行。 */
   private async gcCloudBlobs(userId: string): Promise<number> {
-    const state = await this.loadState(userId);
-    const known = state?.knownBlobs || [];
+    // knownBlobsBase 在 flushKnownBlobs 后已含本轮新增 key，直接复用内存态，避免再读整行。
+    const known = this.knownBlobsBase;
     if (!known.length) return 0;
     const rows = await this.db
       .select({ sha256: attachments.sha256 })
@@ -503,7 +525,10 @@ export class SyncEngine {
         }
       }
     }
-    if (removed) await this.patchState(userId, { knownBlobs: keep });
+    if (removed) {
+      await this.patchState(userId, { knownBlobs: keep });
+      this.knownBlobsBase = keep;
+    }
     return removed;
   }
 

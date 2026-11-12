@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { DB_TOKEN } from '../../shared/constants';
 import type { Database } from '../db/client';
 import { syncState } from '../db/schema';
@@ -131,14 +131,28 @@ export class SyncCloudService {
   }
 
   async run(userId: string): Promise<SyncStats> {
-    const rows = await this.db.select().from(syncState).where(eq(syncState.userId, userId)).limit(1);
-    const row = rows[0];
+    // 原子抢占：把 status 从「非 syncing」改成 syncing，抢到的行才允许继续。
+    // 引擎实例非并发安全（seenRemote / knownBlobs 跨阶段共享），并发请求必须互斥；
+    // 用 UPDATE ... WHERE status != 'syncing' 而非「先读再判」，杜绝两请求同读 idle 的竞态。
+    const claimed = await this.db
+      .update(syncState)
+      .set({ status: 'syncing', lastError: null })
+      .where(and(eq(syncState.userId, userId), ne(syncState.status, 'syncing')))
+      .returning({ userId: syncState.userId, keysJson: syncState.keysJson, deviceId: syncState.deviceId });
+    const row = claimed[0];
     if (!row) {
-      throw Object.assign(new Error('同步未启用'), { status: 404 });
-    }
-    if (row.status === 'syncing') {
+      // 抢不到只可能是「正在同步」或「未启用」；区分一下给前端更明确的语义。
+      const exists = await this.db
+        .select({ userId: syncState.userId })
+        .from(syncState)
+        .where(eq(syncState.userId, userId))
+        .limit(1);
+      if (!exists.length) {
+        throw Object.assign(new Error('同步未启用'), { status: 404 });
+      }
       throw Object.assign(new Error('同步正在进行中，请稍候'), { status: 409 });
     }
+
     const keys = keysFromJson(row.keysJson);
     const transport = this.transportFor(keys, row.deviceId);
     const engine = new SyncEngine(this.db, this.blobs, transport, keys, row.deviceId);

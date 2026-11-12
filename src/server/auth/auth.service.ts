@@ -22,7 +22,8 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string, meta: SessionMeta = {}): Promise<LoginResult> {
-    const key = `${email.toLowerCase()}|${meta.ip || ''}`;
+    // 回环下所有请求 ip 均为 127.0.0.1，限流 key 只用 email（见 login-throttle 注释）。
+    const key = email.toLowerCase();
     this.throttle.assertAllowed(key);
 
     const rows = await this.db

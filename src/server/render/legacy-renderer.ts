@@ -68,6 +68,8 @@ export function findLegacyRoot(explicit?: string): string {
 
 /** 源码只读一次；渲染本身每次新建 context。 */
 const sourceCache = new Map<string, { bundle: string; css: string }>();
+/** 编译产物缓存：vm.Script 只编译一次，避免每次渲染重复 parse 8 个 v1 JS。 */
+const scriptCache = new Map<string, vm.Script>();
 export function loadSources(root: string): { bundle: string; css: string } {
   const hit = sourceCache.get(root);
   if (hit) return hit;
@@ -81,6 +83,16 @@ export function loadSources(root: string): { bundle: string; css: string } {
   };
   sourceCache.set(root, loaded);
   return loaded;
+}
+
+/** 编译 v1 bundle（缓存 Script，隔离只发生在每次新建的 context 上）。 */
+function compiledBundle(root: string): vm.Script {
+  const hit = scriptCache.get(root);
+  if (hit) return hit;
+  const { bundle } = loadSources(root);
+  const script = new vm.Script(bundle, { filename: 'resume-legacy-bundle.js' });
+  scriptCache.set(root, script);
+  return script;
 }
 
 /** vendor 单独缓存、单独校验：预览渲染不依赖它们，缺文件不该让 preview 500。 */
@@ -255,12 +267,12 @@ export function renderResume(payload: any, explicitRoot?: string): StandaloneRen
     throw new Error('JSON 缺少 data.sections，无法渲染');
   }
   const root = findLegacyRoot(explicitRoot || process.env.LEGACY_ROOT);
-  const { bundle } = loadSources(root);
+  compiledBundle(root);
 
   // 每次新建 context：v1 的顶层 let data 是全局态，复用会跨用户串数据。
   const ctx = makeContext();
   vm.createContext(ctx);
-  vm.runInContext(bundle, ctx, { filename: 'resume-legacy-bundle.js', timeout: 10_000 });
+  compiledBundle(root).runInContext(ctx, { timeout: 10_000 });
 
   if (!ctx.ResumeEditor || typeof ctx.ResumeEditor.applyImported !== 'function') {
     throw new Error('未能从 v1 app.js 暴露 ResumeEditor.applyImported（渲染管线封装异常）');

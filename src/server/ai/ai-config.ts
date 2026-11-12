@@ -200,6 +200,9 @@ export function upstreamUrl(cfg: AiRuntimeConfig): string {
   return cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
 }
 
+/** 非流式响应体字节上限：超限即中断，防止异常/恶意上游把单次请求内存拉满。 */
+export const MAX_UPSTREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
+
 /** /chat/completions 请求体：只放行必要字段，避免把任意入参转发给上游。 */
 export function buildChatPayload(
   cfg: AiRuntimeConfig,

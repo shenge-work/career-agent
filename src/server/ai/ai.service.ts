@@ -5,6 +5,7 @@ import {
   normalizeConfig,
   publicConfig,
   upstreamUrl,
+  MAX_UPSTREAM_RESPONSE_BYTES,
   type AiRuntimeConfig,
   type ConfigPatch,
 } from './ai-config';
@@ -44,6 +45,30 @@ function extractContent(raw: string): string {
     /* 非 JSON，原样返回 */
   }
   return s;
+}
+
+/**
+ * 读取上游响应体并强制字节上限。AbortController 只覆盖连接与首字节，
+ * 不覆盖 body 读取阶段，故这里用 reader 边读边计数，超限立即中断，
+ * 防止异常/恶意上游回超大 body 把单次请求内存拉满。
+ */
+async function readBodyCapped(res: Response): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > MAX_UPSTREAM_RESPONSE_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new AiProxyError(502, '上游响应体过大，已中断', 'RESPONSE_TOO_LARGE');
+    }
+    chunks.push(value);
+  }
+  const total = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  return total.toString('utf8');
 }
 
 @Injectable()
@@ -171,7 +196,7 @@ export class AiService {
       await this.bump(userId, { error: true, model: built.model });
       return { ok: false, error: (e as Error).message, latencyMs: Date.now() - t0 };
     }
-    const text = await upstream.text();
+    const text = await readBodyCapped(upstream);
     const latencyMs = Date.now() - t0;
     if (!upstream.ok) {
       await this.bump(userId, { error: true, model: built.model });
@@ -199,7 +224,7 @@ export class AiService {
       throw e;
     }
     if (!upstream.ok || !upstream.body) {
-      const text = await upstream.text().catch(() => '');
+      const text = await readBodyCapped(upstream).catch(() => '');
       await this.bump(userId, { error: true, model: built.model });
       throw new AiProxyError(
         upstream.status || 502,
@@ -240,7 +265,7 @@ export class AiService {
       await this.bump(userId, { error: true, model: built.model });
       throw e;
     }
-    const text = await upstream.text().catch(() => '');
+    const text = await readBodyCapped(upstream).catch(() => '');
     if (!upstream.ok) {
       await this.bump(userId, { error: true, model: built.model });
       throw new AiProxyError(
