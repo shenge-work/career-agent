@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { SqliteSyncStore } from '../src/sqlite-store';
 import { createSyncServer } from '../src/server';
 import {
@@ -27,6 +28,19 @@ import {
 } from '../../../src/server/sync/crypto';
 import { RemoteSyncTransport } from '../../../src/server/sync/remote-transport';
 import { INITIAL_SEQ, SeqConflictError, SYNC_PROTOCOL_VERSION } from '../../../src/server/sync/transport';
+
+/** 读取 SYNC_INSECURE_TLS：为 "true" 时对自签名证书关闭校验，默认 false 保持严格校验。 */
+const INSECURE_TLS = process.env.SYNC_INSECURE_TLS === 'true';
+
+/**
+ * 脚本内原生请求（health / 创建 vault / 未授权探测）的统一入口，
+ * 与 RemoteSyncTransport 的 insecureTls 策略保持一致，仅影响本进程请求。
+ */
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
+const fetchImpl: typeof fetch = INSECURE_TLS
+  ? ((input: any, init?: any) =>
+      undiciFetch(input, { ...init, dispatcher: insecureAgent })) as unknown as typeof fetch
+  : fetch;
 
 function assert(cond: unknown, label: string): void {
   if (!cond) throw new Error(`冒烟失败：${label}`);
@@ -59,7 +73,7 @@ async function withLocalServer(fn: (base: string) => Promise<void>): Promise<voi
 }
 
 async function bootstrapCreate(base: string, keys: ReturnType<typeof deriveVaultKeys>): Promise<void> {
-  const res = await fetch(`${base}/v1/vaults`, {
+  const res = await fetchImpl(`${base}/v1/vaults`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -77,12 +91,12 @@ async function run(base: string): Promise<void> {
   const keys = deriveVaultKeys(code);
 
   console.log('[1] 部署自检 health');
-  const ping = await fetch(`${base}/v1/health`).then((r) => r.json());
+  const ping = await fetchImpl(`${base}/v1/health`).then((r) => r.json());
   assert(ping.ok && ping.v === SYNC_PROTOCOL_VERSION, 'health 返回 ok 且协议版本一致');
 
   console.log('[2] 创建 vault（第一台设备）');
   await bootstrapCreate(base, keys);
-  const transport = new RemoteSyncTransport({ baseUrl: base, keys, deviceId: 'device-A' });
+  const transport = new RemoteSyncTransport({ baseUrl: base, keys, deviceId: 'device-A', insecureTls: INSECURE_TLS });
 
   console.log('[3] head 初始游标');
   const head0 = await transport.head();
@@ -137,12 +151,12 @@ async function run(base: string): Promise<void> {
   console.log('[7] 跨 vault 隔离');
   const keys2 = deriveVaultKeys(generateRecoveryCode());
   await bootstrapCreate(base, keys2);
-  const transport2 = new RemoteSyncTransport({ baseUrl: base, keys: keys2, deviceId: 'device-B' });
+  const transport2 = new RemoteSyncTransport({ baseUrl: base, keys: keys2, deviceId: 'device-B', insecureTls: INSECURE_TLS });
   const head2 = await transport2.head();
   assert(head2.seq === INITIAL_SEQ, '另一个 vault 独立游标，互不干扰');
 
   console.log('[8] 未授权访问必须 401');
-  const unauth = await fetch(`${base}/v1/vaults/${keys.vaultId}/head`);
+  const unauth = await fetchImpl(`${base}/v1/vaults/${keys.vaultId}/head`);
   assert(unauth.status === 401, '无 X-CA-Auth 头返回 401');
 
   console.log('\n全部冒烟用例通过 ✅');

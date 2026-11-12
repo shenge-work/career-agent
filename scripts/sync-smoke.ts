@@ -35,6 +35,7 @@ const PROVIDER = (process.env.SYNC_TRANSPORT || 'cloudflare').trim().toLowerCase
 const PATH_PREFIX = process.env.SYNC_PATH_PREFIX || undefined;
 const CODE = process.env.SYNC_RECOVERY_CODE || generateRecoveryCode();
 const SKIP_BLOB = process.env.SYNC_SKIP_BLOB === '1';
+const INSECURE_TLS = process.env.SYNC_INSECURE_TLS === 'true';
 const SHA = 'd'.repeat(64);
 
 type AnyTransport = CloudflareTransport | CloudBaseTransport;
@@ -53,7 +54,13 @@ function sample(entityId: string, title: string): SyncEvent {
 }
 
 function options(): RemoteTransportOptions {
-  return { baseUrl: BASE!, pathPrefix: PATH_PREFIX, keys: deriveVaultKeys(CODE), deviceId: 'smoke-A' };
+  return {
+    baseUrl: BASE!,
+    pathPrefix: PATH_PREFIX,
+    keys: deriveVaultKeys(CODE),
+    deviceId: 'smoke-A',
+    insecureTls: INSECURE_TLS,
+  };
 }
 
 async function connect(): Promise<AnyTransport> {
@@ -80,6 +87,7 @@ function join(): Promise<AnyTransport> {
     pathPrefix: PATH_PREFIX,
     recoveryCode: CODE,
     deviceId: 'smoke-B',
+    insecureTls: INSECURE_TLS,
   };
   return PROVIDER === 'cloudbase'
     ? CloudBaseTransport.joinVault(joinOpts)
