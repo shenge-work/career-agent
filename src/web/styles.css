@@ -946,13 +946,13 @@ code {
   flex: 1;
   width: 100%;
   border: 0;
-  background: #2a2a2a;
+  background: var(--surface-3);
 }
 .preview-fit-scroll {
   flex: 1;
   overflow: auto;
   padding: 12px;
-  background: #1f1f1f;
+  background: var(--surface-2);
 }
 .preview-fit {
   position: relative;
@@ -1049,6 +1049,147 @@ code {
 .field textarea { margin-top: 6px; font-size: 13px; line-height: 1.6; resize: vertical; }
 .json-fold { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
 .json-fold textarea { margin: 8px 0; font-size: 12px; }
+
+/* ----------------------------------------------- 语义化编辑器（简历结构卡片） */
+.semantic-editor { display: flex; flex-direction: column; gap: 10px; }
+.sec-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  user-select: none;
+}
+.sec-head.static { cursor: default; }
+.sec-head:hover { background: var(--surface-3); }
+.sec-head.static:hover { background: var(--surface-2); }
+.sec-arrow { width: 14px; color: var(--muted); font-size: 12px; flex: 0 0 auto; }
+.sec-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.sec-body { padding: 4px 12px 12px; }
+.sec-card .chip { flex: 0 0 auto; }
+
+.list-block { margin-top: 10px; }
+.list-label { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+.list-label .muted { font-weight: 400; }
+
+.item-card {
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.item-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+}
+.item-bar .spacer { flex: 1; }
+.item-body { padding: 4px 10px 10px; }
+.career-item .item-body { padding-top: 0; }
+.project-card { background: var(--surface-2); }
+.sublist { margin-top: 4px; }
+
+.collapse-toggle {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  width: 14px;
+  flex: 0 0 auto;
+}
+.collapse-toggle:hover { color: var(--text); }
+
+.inline-row { display: flex; align-items: center; gap: 4px; margin: 6px 0; }
+.inline-row input { margin-top: 0; flex: 1; }
+
+.margins-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.margin-cell { display: flex; flex-direction: column; gap: 4px; margin-top: 0; }
+.margin-cell span { font-size: 11px; color: var(--muted); }
+.margin-cell input { margin-top: 0; padding: 8px 10px; font-size: 13px; }
+
+.result-row { display: flex; align-items: flex-start; gap: 6px; margin: 6px 0; }
+.result-row textarea { flex: 1; margin-top: 0; }
+.result-actions { display: flex; gap: 2px; padding-top: 2px; }
+.result-actions .mini { padding: 3px 7px; }
+
+button.mini.add {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+button.mini.add:hover { border-color: var(--muted); color: var(--text); }
+
+.bold-hint {
+  margin-left: 5px;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--faint);
+  font-size: 10px;
+  cursor: help;
+  vertical-align: 1px;
+}
+
+.add-section-wrap { position: relative; }
+.add-section-pop { left: 0; right: auto; min-width: 140px; }
+
+/* ----------------------------------------------- 主题可视化画廊 */
+.theme-gallery { min-width: 288px; padding: 8px; }
+.theme-gallery-title { padding: 2px 8px 8px; font-size: 12px; color: var(--muted); }
+.theme-gallery-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.theme-gallery-item:hover { background: var(--surface-3); }
+.theme-gallery-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.theme-swatch-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 56px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.theme-swatch-mini .theme-swatch-bar { height: 5px; border-radius: 2px; }
+.theme-gallery-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.theme-gallery-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.theme-gallery-desc { font-size: 12px; color: var(--muted); line-height: 1.45; }
 
 /* ------------------------------------------------------- P2b · AI / 采集 */
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
