@@ -380,6 +380,20 @@ export interface KbItem {
   updatedAt: string;
 }
 
+/** N15 · STAR 经历素材。 */
+export interface SnippetItem {
+  id: string;
+  title: string;
+  category: string | null;
+  tags: string[] | null;
+  situation: string | null;
+  task: string | null;
+  action: string | null;
+  result: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** N12 S2 · 面试复盘（AI 结构化结果）。 */
 export interface InterviewReview {
   summary: string;

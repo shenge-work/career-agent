@@ -13,6 +13,7 @@ import Portfolio from './pages/Portfolio';
 import Companies from './pages/Companies';
 import CompanyDetailPage from './pages/CompanyDetailPage';
 import Referrals from './pages/Referrals';
+import Snippets from './pages/Snippets';
 import TrackerPage from './pages/Tracker';
 import TrackerDetailPage from './pages/TrackerDetailPage';
 import Account from './pages/Account';
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="/companies" element={<Companies />} />
           <Route path="/companies/:id" element={<CompanyDetailPage />} />
           <Route path="/referrals" element={<Referrals />} />
+          <Route path="/snippets" element={<Snippets />} />
           <Route path="/tracker" element={<TrackerPage />} />
           <Route path="/tracker/:id" element={<TrackerDetailPage />} />
           <Route path="/account" element={<Account user={data.user} />} />

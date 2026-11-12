@@ -770,6 +770,45 @@ export const practiceWeaknesses = pgTable(
   ]
 );
 
+/**
+ * N15 · STAR 经历素材库（Snippet）—— 跨简历复用的经历片段。
+ *
+ * 一条 snippet = 一段可复用的「STAR 结构化经历」：情境 / 任务 / 行动 / 结果四要素，
+ * 加上标题、分类、标签。核心价值：求职者反复投递时，把打磨好的经历片段沉淀下来，
+ * 一键插入任意简历，而不是每次重写。
+ *
+ * 显式列（不走 payload）：title / category / tags / situation / task / action / result
+ * 都是高频查询或结构固定字段，落列比落 jsonb 更清晰、可索引。
+ */
+export const snippets = pgTable(
+  'snippets',
+  {
+    id: text('id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 片段标题（一句话概括，如「高并发网关性能优化」）。 */
+    title: text('title').notNull(),
+    /** 分类（项目 / 工作 / 成果 / 技能 / 其它，自由文本）。 */
+    category: text('category'),
+    /** 标签，用于检索加权与投递时匹配 JD 关键词。 */
+    tags: jsonb('tags').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** STAR 四要素。 */
+    situation: text('situation'),
+    task: text('task'),
+    action: text('action'),
+    result: text('result'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    ...syncCols(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    index('snippets_user_idx').on(t.userId),
+    index('snippets_user_cat_idx').on(t.userId, t.category),
+  ]
+);
+
 export const schema = {
   users,
   sessions,
@@ -798,6 +837,7 @@ export const schema = {
   practiceAnswers,
   practiceEvaluations,
   practiceWeaknesses,
+  snippets,
 };
 
 export type UserRow = typeof users.$inferSelect;
@@ -817,3 +857,4 @@ export type PracticeQuestionRow = typeof practiceQuestions.$inferSelect;
 export type PracticeAnswerRow = typeof practiceAnswers.$inferSelect;
 export type PracticeEvaluationRow = typeof practiceEvaluations.$inferSelect;
 export type PracticeWeaknessRow = typeof practiceWeaknesses.$inferSelect;
+export type SnippetRow = typeof snippets.$inferSelect;

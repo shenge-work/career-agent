@@ -13,6 +13,7 @@ import { ReferralModule } from './referral/referral.module';
 import { RenderModule } from './render/render.module';
 import { ResumesModule } from './resumes/resumes.module';
 import { SetupModule } from './setup/setup.module';
+import { SnippetModule } from './snippet/snippet.module';
 import { SyncModule } from './sync/sync.module';
 import { UsersModule } from './users/users.module';
 
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
     PracticeModule,
     ReferralModule,
     SetupModule,
+    SnippetModule,
     SyncModule,
   ],
 })

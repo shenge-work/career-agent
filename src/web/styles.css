@@ -2863,6 +2863,76 @@ pre.pitch-text { font-family: inherit; }
 }
 .ref-main .kv { grid-template-columns: 78px minmax(0, 1fr); }
 
+/* ------------------------------------------------- STAR 经历素材 */
+.snippet-result {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.snippet-star {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.snippet-star-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.snippet-star-item p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.snippet-star-item p.muted { color: var(--muted); }
+.snippet-star-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* 编辑器「插入素材」弹窗 */
+.snippet-modal { max-width: 560px; max-height: 76vh; overflow-y: auto; }
+.snippet-pick-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.snippet-pick {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.snippet-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.snippet-pick-preview {
+  margin-top: 6px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .ref-form { display: flex; flex-direction: column; gap: 10px; }
 .ref-form label {
   display: flex;

@@ -12,6 +12,7 @@ const GROUPS: { title: string; items: { to: string; label: string; icon: string 
       { to: '/applications', label: '岗位', icon: '◈' },
       { to: '/portfolio', label: '作品集', icon: '▧' },
       { to: '/resumes', label: '简历库', icon: '▤' },
+      { to: '/snippets', label: '经历素材', icon: '✦' },
       { to: '/attachments', label: '附件库', icon: '▣' },
       { to: '/conflicts', label: '冲突恢复', icon: '⟲' },
       { to: '/sync', label: '云同步', icon: '⇅' },

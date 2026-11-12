@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { api, auditResume, exportTextUrl, pdfUrl, post, put, type AuditReport, type ResumeItem } from '../api';
+import { api, auditResume, exportTextUrl, pdfUrl, post, put, type AuditReport, type ResumeItem, type SnippetItem } from '../api';
 import ConfirmModal from '../components/ConfirmModal';
 
 /** 点击外部关闭下拉菜单的通用 hook：返回 ref 与开关，供主题/格式/新增板块菜单复用。 */
@@ -723,6 +723,13 @@ export default function Editor() {
     },
     onError: (e) => setError((e as Error).message),
   });
+  // 插入 STAR 素材：从素材库选一条，一键插进当前简历（作为关键印记高亮卡）。
+  const [snippetOpen, setSnippetOpen] = useState(false);
+  const { data: snippetList = [] } = useQuery({
+    queryKey: ['snippets'],
+    queryFn: () => api<SnippetItem[]>('/snippets'),
+    enabled: snippetOpen,
+  });
   // P0-4：A4 预览自适应宽度（默认「适应宽度」，可按需切「实际大小」）。
   const [fitMode, setFitMode] = useState<'fit' | 'full'>('fit');
   const [previewScale, setPreviewScale] = useState(1);
@@ -805,6 +812,36 @@ export default function Editor() {
     setCanUndo(historyRef.current.undo.length > 0);
     setCanRedo(historyRef.current.redo.length > 0);
   }
+
+  /** 把一条 STAR 素材插进当前简历：优先追加到 highlights 板块的高亮卡，无则新建该板块。 */
+  function insertSnippet(s: SnippetItem) {
+    const data = dataNode;
+    if (!data) return;
+    const sections = Array.isArray(data.sections) ? data.sections : [];
+    // 素材文本：优先量化结果，退而用行动，最后用标题。
+    const text = (s.result || s.action || s.title || '').trim();
+    if (!text) return;
+
+    const card = { text, spacing: sp() };
+    const hi = sections.findIndex((sec: any) => sec?.type === 'highlights');
+    if (hi >= 0) {
+      const cards = Array.isArray(sections[hi].cards) ? sections[hi].cards : [];
+      onSet([...dataPrefix, 'sections', hi, 'cards'], [...cards, card]);
+    } else {
+      const newSec = {
+        id: newSectionId(),
+        type: 'highlights',
+        title: '关键印记',
+        pageBreak: false,
+        cards: [card, blankHighlightCard()],
+        tags: ['', '', ''],
+        spacing: sp(),
+      };
+      onSet([...dataPrefix, 'sections'], [...sections, newSec]);
+    }
+    setSnippetOpen(false);
+  }
+
 
   function undo() {
     const h = historyRef.current;
@@ -1041,6 +1078,10 @@ export default function Editor() {
             {auditM.isPending ? '体检中…' : '体检'}
           </button>
 
+          <button className="ghost mini" onClick={() => setSnippetOpen(true)}>
+            插入素材
+          </button>
+
           <div className="menu-wrap" ref={formatsMenu.ref}>
             <button className="ghost mini" onClick={() => formatsMenu.setOpen((v) => !v)}>
               导出 ▾
@@ -1204,6 +1245,48 @@ export default function Editor() {
             </ul>
             <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
               <button className="mini" onClick={() => setAuditOpen(false)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {snippetOpen && (
+        <div className="modal-backdrop" onClick={() => setSnippetOpen(false)}>
+          <div className="modal snippet-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <h2>插入经历素材</h2>
+            <p className="muted small">
+              从素材库选一条，把它的量化结果作为「关键印记」高亮卡插进当前简历。
+            </p>
+            {snippetList.length === 0 ? (
+              <div className="empty" style={{ marginTop: 12 }}>
+                素材库还是空的。先去「经历素材」沉淀第一条 STAR 片段，或直接在这里手动输入。
+              </div>
+            ) : (
+              <ul className="snippet-pick-list">
+                {snippetList.map((s) => {
+                  const preview = (s.result || s.action || s.title || '').trim();
+                  return (
+                    <li key={s.id} className="snippet-pick">
+                      <div className="snippet-pick-head">
+                        <strong>{s.title}</strong>
+                        {s.category && <span className="tag">{s.category}</span>}
+                      </div>
+                      {preview && <div className="muted small snippet-pick-preview">{preview}</div>}
+                      <div className="btn-row" style={{ marginTop: 8 }}>
+                        <button className="mini primary" onClick={() => insertSnippet(s)}>
+                          插入为高亮卡
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+              <Link className="mini" to="/snippets" onClick={() => setSnippetOpen(false)}>
+                去素材库管理 ↗
+              </Link>
+              <button className="mini" onClick={() => setSnippetOpen(false)}>关闭</button>
             </div>
           </div>
         </div>

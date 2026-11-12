@@ -23,6 +23,7 @@ import {
   referrals,
   resumes,
   settings,
+  snippets,
   tracker,
   trackerChatEvents,
   versions,
@@ -301,6 +302,23 @@ export type PracticeWeaknessPatch = Partial<
     PracticeWeaknessInput,
     'source' | 'dimension' | 'questionId' | 'interviewNoteId' | 'reason' | 'status' | 'lastPracticeAt' | 'lastLevel'
   >
+>;
+
+/** N15 · STAR 经历素材输入。 */
+export interface SnippetInput {
+  id: string;
+  title: string;
+  category?: string | null;
+  tags?: string[];
+  situation?: string | null;
+  task?: string | null;
+  action?: string | null;
+  result?: string | null;
+}
+
+/** STAR 经历素材允许更新的字段白名单。 */
+export type SnippetPatch = Partial<
+  Pick<SnippetInput, 'title' | 'category' | 'tags' | 'situation' | 'task' | 'action' | 'result'>
 >;
 
 /**
@@ -1030,6 +1048,39 @@ export class TenantDb {
           .returning(),
 
       deletePracticeWeakness: (id: string) => softDelete(practiceWeaknesses, practiceWeaknesses.id, id),
+
+      // ------------------------------------------------------ STAR 经历素材
+      listSnippets: () =>
+        db.select().from(snippets).where(active(snippets)).orderBy(desc(snippets.updatedAt)),
+
+      getSnippet: (id: string) =>
+        db
+          .select()
+          .from(snippets)
+          .where(active(snippets, eq(snippets.id, id)))
+          .limit(1),
+
+      createSnippet: (input: SnippetInput) =>
+        revive(snippets, {
+          id: input.id,
+          userId,
+          title: input.title,
+          category: input.category ?? null,
+          tags: input.tags ?? [],
+          situation: input.situation ?? null,
+          task: input.task ?? null,
+          action: input.action ?? null,
+          result: input.result ?? null,
+        }),
+
+      updateSnippet: (id: string, patch: SnippetPatch) =>
+        db
+          .update(snippets)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(active(snippets, eq(snippets.id, id)))
+          .returning(),
+
+      deleteSnippet: (id: string) => softDelete(snippets, snippets.id, id),
 
       // ------------------------------------------------------------ 设置
       getSettings: () =>
