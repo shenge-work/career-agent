@@ -1,8 +1,41 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+  type MouseEvent as ReactMouseEvent, type ReactNode,
+} from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, auditResume, exportTextUrl, pdfUrl, post, put, type AuditReport, type ResumeItem, type SnippetItem } from '../api';
 import ConfirmModal from '../components/ConfirmModal';
+import { AutosaveController, formatSavedAt, type AutosaveView, type SaveTransport } from './editor-autosave';
+
+/** keepalive 请求体保守上限：48 KiB（浏览器 64 KiB 限制预留 headers 等开销）。 */
+const KEEPALIVE_LIMIT = 48 * 1024;
+/** 超上限或 flush 失败时的可见提示（浏览器原生离开确认文案不可自定义）。 */
+const LARGE_PAYLOAD_HINT = '内容较大，无法自动保存；请点击状态条「重试」保存后再离开';
+
+/** 状态条初始视图：与 AutosaveController 构造后的 idle 视图一致。 */
+const INITIAL_SAVE_VIEW: AutosaveView = {
+  status: 'idle', saveError: '', lastSavedAt: null, dirty: false, inflight: false, pendingCount: 0,
+};
+
+/**
+ * 卸载 / 刷新前的 best-effort 写回：api.ts 的 put() 无法注入 keepalive，此处用原生请求
+ * 复刻 PUT /api/resumes/:id 的 { payload } 契约（与 InterviewSession 同款写法）。
+ * 返回 false 表示体量超限，不发必然失败的请求，由调用方硬拦截并写可见错误。
+ */
+function bestEffortFlush(resumeId: string, payload: any, onError: (msg: string) => void): boolean {
+  const body = JSON.stringify({ payload });
+  const bytes = new TextEncoder().encode(body).length;
+  if (bytes > KEEPALIVE_LIMIT) return false;
+  fetch(`/api/resumes/${encodeURIComponent(resumeId)}`, {
+    method: 'PUT',
+    credentials: 'include',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  }).catch(() => onError(LARGE_PAYLOAD_HINT));
+  return true;
+}
 
 /** 点击外部关闭下拉菜单的通用 hook：返回 ref 与开关，供主题/格式/新增板块菜单复用。 */
 function useDismissible(initial = false) {
@@ -701,9 +734,9 @@ const THEME_PALETTES: Record<string, { bars: string[]; paper: string }> = {
 export default function Editor() {
   const { id = '' } = useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [draft, setDraft] = useState<any>(null);
-  const [status, setStatus] = useState<'idle' | 'editing' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
   const [previewKey, setPreviewKey] = useState(0);
   const [showJson, setShowJson] = useState(false);
@@ -738,61 +771,151 @@ export default function Editor() {
   const [previewHeight, setPreviewHeight] = useState(1123);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const loadedIdRef = useRef<string | null>(null);
-  const baselineRef = useRef<string>('');
   // 撤销/重做：会话级内存栈（对齐 v1 undoRemove 语义，不写后端避免写放大）
   const historyRef = useRef<{ undo: any[]; redo: any[] }>({ undo: [], redo: [] });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // 自动保存：纯状态机 + 独立错误槽 + 离开确认（不复用导出/主题/体检的 error）
+  const ctrlRef = useRef<AutosaveController | null>(null);
+  const draftRef = useRef<any>(null);
+  // 生命周期令牌：区分「真正卸载」与 StrictMode 的同步二次挂载
+  const lifecycleRef = useRef(0);
+  const [saveView, setSaveView] = useState<AutosaveView>(INITIAL_SAVE_VIEW);
+  const [saveError, setSaveError] = useState('');
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
 
   const { data, isLoading, error: loadError } = useQuery({
     queryKey: ['resume', id],
     queryFn: () => api<ResumeItem>(`/resumes/${id}`),
   });
 
-  // 只在「首次拿到该简历」时灌入 draft；保存后的 invalidate 不重置未保存的编辑
+  /** 创建绑定指定简历 id 的状态机：transport 恒为 PUT /api/resumes/:id 的 { payload } 契约。 */
+  const makeController = useCallback((resumeId: string): AutosaveController => {
+    const transport: SaveTransport = (payload, _seq) => {
+      // 保留 v1 惯例：写盘 payload 带 savedAt（legacy 渲染 / 导入仲裁消费），
+      // 但绝不参与任何比较（基线一律走 canonical）。
+      const saving = deepClone(payload);
+      saving.savedAt = Date.now();
+      return put<ResumeItem>(`/resumes/${resumeId}`, { payload: saving }).then(() => undefined);
+    };
+    return new AutosaveController({
+      transport,
+      onChange: (v) => { setSaveView(v); setSaveError(v.saveError); },
+      onDrained: () => {
+        setPreviewKey((k) => k + 1);
+        qc.invalidateQueries({ queryKey: ['resumes'] });
+        setSaveError('');
+      },
+    });
+  }, [qc]);
+
+  // controller 惰性创建一次；id 切换时在下面的加载 effect 里 dispose + 重建。
+  if (!ctrlRef.current) {
+    ctrlRef.current = makeController(id);
+  }
+  // 每 render 同步最新 draft：重试 / 原生确认 / 卸载 flush 永远拿到最新内容。
+  draftRef.current = draft;
+
+  /** 超阈值 / keepalive reject 时写独立错误槽（不与 error 共槽）。 */
+  const pushSaveError = useCallback((msg: string) => setSaveError(msg), []);
+
+  // 只在「首次拿到该简历」时灌入 draft；保存后的 invalidate 不重置未保存的编辑。
+  // id 参数切换时组件不卸载：必须 dispose 旧状态机 → 重建绑定新 id 的状态机 → reset(newDraft)，
+  // 否则 A 简历的脏状态与在飞请求会串到 B。
   useEffect(() => {
     if (data && loadedIdRef.current !== id) {
+      const switching = loadedIdRef.current !== null;
       loadedIdRef.current = id;
       const p = deepClone(data.payload || {});
+      let c = ctrlRef.current;
+      if (switching && c) {
+        c.dispose();
+        c = makeController(id);
+        ctrlRef.current = c;
+        setSaveView({ ...INITIAL_SAVE_VIEW });
+      }
       setDraft(p);
       setJsonText(JSON.stringify(p, null, 2));
-      baselineRef.current = JSON.stringify(p);
-      setStatus('idle');
+      c?.reset(p); // baseline = canonical(p)，清空脏状态
+      setSaveError('');
+      setLeaveOpen(false);
     }
-  }, [data, id]);
+  }, [data, id, makeController]);
 
-  const saveM = useMutation({
-    mutationFn: (payload: any) => put<ResumeItem>(`/resumes/${id}`, { payload }),
-  });
-
-  // 输入停 800ms 自动保存；保存成功后刷新预览 iframe
+  // 800ms 防抖：touch 立即给出「有未保存改动」反馈，到期 commit 才真正发 PUT。
+  // 幂等由状态机的 canonical 基线保证，不再依赖 effect 依赖数组侥幸。
   useEffect(() => {
     if (!draft) return;
-    const current = JSON.stringify(draft);
-    if (current === baselineRef.current) return;
-    setStatus('editing');
-    setError('');
-    const timer = setTimeout(() => {
-      setStatus('saving');
-      const saving = deepClone(draft);
-      saving.savedAt = Date.now(); // v1 惯例：写盘 payload 带 savedAt
-      saveM.mutate(saving, {
-        onSuccess: () => {
-          baselineRef.current = JSON.stringify(saving);
-          setJsonText(JSON.stringify(saving, null, 2));
-          setStatus('saved');
-          setPreviewKey((k) => k + 1);
-          qc.invalidateQueries({ queryKey: ['resumes'] });
-        },
-        onError: (e) => {
-          setStatus('error');
-          setError((e as Error).message);
-        },
-      });
-    }, 800);
+    const c = ctrlRef.current;
+    if (!c) return;
+    c.touch(draft);
+    const timer = setTimeout(() => c.commit(), 800);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, id]);
+
+  // 只在脏状态注册原生离开确认；保存成功（dirty=false）后 cleanup 自动解绑。
+  // 一律弹原生确认，同时尽力 flush；超阈值或 fetch reject 写可见 saveError，绝不静默丢弃。
+  useEffect(() => {
+    if (!saveView.dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      const payload = draftRef.current;
+      if (!payload) return;
+      const ok = bestEffortFlush(id, payload, pushSaveError);
+      if (!ok) pushSaveError(LARGE_PAYLOAD_HINT);
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [saveView.dirty, id, pushSaveError]);
+
+  // 卸载 / id 切换：仅当队列空闲（无在飞 PUT）时发一次 best-effort flush，避免与在飞 PUT 乱序。
+  // main.tsx 启用了 React.StrictMode：挂载时会同步「setup → cleanup → setup」，
+  // 若 cleanup 里立刻 dispose，第二次 setup 不会重建 controller，自动保存会失效。
+  // 用生命周期令牌 + 微任务确认「确实没有新的 setup」后才销毁；id 切换的 dispose 由加载 effect 负责。
+  useEffect(() => {
+    const token = ++lifecycleRef.current;
+    return () => {
+      const c = ctrlRef.current;
+      if (!c) return;
+      const payload = draftRef.current;
+      if (payload && c.isDirty(payload) && c.isIdle()) {
+        bestEffortFlush(id, payload, pushSaveError);
+      }
+      queueMicrotask(() => {
+        if (lifecycleRef.current === token) c.dispose();
+      });
+    };
+  }, [id, pushSaveError]);
+
+  /** 状态条「重试」：以当前最新 draft 立即发一次，不受 draft 未变限制。 */
+  const handleRetry = useCallback(() => {
+    ctrlRef.current?.retry(draftRef.current);
+  }, []);
+
+  /** 「← 简历库」：脏状态拦截默认跳转，改走三按钮确认（唯一可保证落库再走的受控路径）。 */
+  function handleBack(e: ReactMouseEvent<HTMLAnchorElement>) {
+    if (!saveView.dirty) return;
+    e.preventDefault();
+    setLeaveOpen(true);
+  }
+
+  /** 「立即保存并离开」：等待队列排空；失败保持弹窗打开并把原因写入独立错误槽。 */
+  async function handleSaveAndLeave() {
+    const c = ctrlRef.current;
+    if (!c) return;
+    setLeaveBusy(true);
+    await c.flushAndWait(draftRef.current);
+    const err = c.view().saveError;
+    setLeaveBusy(false);
+    if (err) {
+      setSaveError(err);
+      return;
+    }
+    setLeaveOpen(false);
+    navigate('/resumes');
+  }
 
   const onSet = (path: Path, value: any) => {
     setDraft((prev: any) => {
@@ -990,12 +1113,12 @@ export default function Editor() {
   const themeM = useMutation({
     mutationFn: (themeId: string) => post<ResumeItem>(`/resumes/${id}/theme`, { themeId }),
     onSuccess: (row) => {
-      // 应用主题后：用服务端返回的 payload 刷新 draft，并刷新预览
+      // 应用主题后：用服务端返回的 payload 刷新 draft，并刷新预览。
+      // baseline 改由状态机 reset(p) 用 canonical 口径重设（主题即一次服务端写入）。
       const p = deepClone(row.payload || {});
       setDraft(p);
-      baselineRef.current = JSON.stringify(p);
+      ctrlRef.current?.reset(p);
       setJsonText(JSON.stringify(p, null, 2));
-      setStatus('saved');
       setPreviewKey((k) => k + 1);
       qc.invalidateQueries({ queryKey: ['resumes'] });
       themesMenu.setOpen(false);
@@ -1025,18 +1148,23 @@ export default function Editor() {
     <>
       <div className="editor-head">
         <div>
-          <Link className="back" to="/resumes">← 简历库</Link>
+          <Link className="back" to="/resumes" onClick={handleBack}>← 简历库</Link>
           <h1>{data.title}</h1>
           <p className="muted small">
             左栏为 v1 真实渲染管线输出的 A4 预览；右栏改动 800ms 后自动保存并刷新预览。
           </p>
         </div>
         <div className="editor-actions">
-          <span className={'save-state ' + status}>
-            {status === 'saving' ? '保存中…' :
-             status === 'editing' ? '有未保存改动' :
-             status === 'saved' ? '已保存' :
-             status === 'error' ? '保存失败' : '已同步'}
+          <span className={'save-state ' + saveView.status} aria-live="polite">
+            {saveView.status === 'saving' ? '保存中…' :
+             saveView.status === 'editing' ? '有未保存改动' :
+             saveView.status === 'error' ? '保存失败' : '已保存'}
+            {saveView.lastSavedAt && (
+              <span className="save-state__time">最近保存于 {formatSavedAt(saveView.lastSavedAt)}</span>
+            )}
+            {saveView.status === 'error' && (
+              <button className="mini save-state__retry" aria-label="重试保存" onClick={handleRetry}>重试</button>
+            )}
           </span>
 
           <div className="menu-wrap" ref={themesMenu.ref}>
@@ -1109,6 +1237,7 @@ export default function Editor() {
       </div>
 
       {error && <div className="alert">{error}</div>}
+      {saveError && <div className="alert save-error-line">{saveError}</div>}
 
       <div className="hint small">
         <button className="hint-toggle" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
@@ -1291,6 +1420,21 @@ export default function Editor() {
           </div>
         </div>
       )}
+
+      {/* 脏状态离开确认：三按钮（继续编辑 / 立即保存并离开 / 直接离开） */}
+      <ConfirmModal
+        open={leaveOpen}
+        title="有未保存的改动"
+        message="确定离开吗？"
+        cancelLabel="继续编辑"
+        extraLabel="立即保存并离开"
+        confirmLabel="直接离开"
+        danger
+        busy={leaveBusy}
+        onCancel={() => setLeaveOpen(false)}
+        onExtra={handleSaveAndLeave}
+        onConfirm={() => { setLeaveOpen(false); navigate('/resumes'); }}
+      />
     </>
   );
 }
