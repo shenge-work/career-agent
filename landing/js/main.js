@@ -13,6 +13,9 @@
 (function () {
   'use strict';
 
+  // 渐进增强：标记 JS 可用，供 CSS 区分无 JS 场景
+  document.documentElement.classList.add('js');
+
   /**
    * ============================================================
    * 下载配置（替换下载地址请改这里）
@@ -76,6 +79,7 @@
 
   /**
    * 移动端导航菜单开关。
+   * 含 a11y：aria 状态同步、Esc 关闭、焦点管理、点击外部收起、断点重置。
    */
   function bindMobileNav() {
     var toggle = document.querySelector('.nav-toggle');
@@ -84,19 +88,76 @@
       return;
     }
 
+    var links = menu.querySelectorAll('a');
+    var firstLink = links[0];
+
+    function setOpen(open) {
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? '关闭菜单' : '打开菜单');
+      menu.classList.toggle('is-open', open);
+    }
+
+    function openMenu() {
+      setOpen(true);
+      if (firstLink) {
+        firstLink.focus();
+      }
+    }
+
+    function closeMenu() {
+      var wasOpen = toggle.getAttribute('aria-expanded') === 'true';
+      setOpen(false);
+      if (wasOpen) {
+        toggle.focus();
+      }
+    }
+
     toggle.addEventListener('click', function () {
       var isOpen = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', String(!isOpen));
-      menu.classList.toggle('is-open', !isOpen);
+      if (isOpen) {
+        closeMenu();
+      } else {
+        openMenu();
+      }
+    });
+
+    // Esc 关闭
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+        closeMenu();
+      }
+    });
+
+    // 点击菜单外区域收起
+    document.addEventListener('click', function (event) {
+      if (toggle.getAttribute('aria-expanded') !== 'true') {
+        return;
+      }
+      if (toggle.contains(event.target) || menu.contains(event.target)) {
+        return;
+      }
+      closeMenu();
     });
 
     // 点击菜单项后自动收起
-    Array.prototype.forEach.call(menu.querySelectorAll('a'), function (link) {
+    Array.prototype.forEach.call(links, function (link) {
       link.addEventListener('click', function () {
-        toggle.setAttribute('aria-expanded', 'false');
-        menu.classList.remove('is-open');
+        closeMenu();
       });
     });
+
+    // 视口跨过 720px 断点时重置展开态
+    if (typeof window.matchMedia === 'function') {
+      var mql = window.matchMedia('(max-width: 720px)');
+      var handleBreakpointChange = function () {
+        setOpen(false);
+      };
+      if (typeof mql.addEventListener === 'function') {
+        mql.addEventListener('change', handleBreakpointChange);
+      } else if (typeof mql.addListener === 'function') {
+        mql.addListener(handleBreakpointChange);
+      }
+    }
   }
 
   /**
