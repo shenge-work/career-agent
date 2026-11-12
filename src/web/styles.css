@@ -3542,6 +3542,16 @@ button.co-card.compare-pick.picked {
 .usage-metric-value.tone-green {
   color: rgba(var(--_teal), 1);
 }
+/* 预估费用卡跨整行，作为概览的底部汇总条 */
+.usage-metric.usage-metric-cost {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+}
+.usage-metric.usage-metric-cost .usage-metric-value {
+  font-size: 20px;
+}
 
 .usage-table-wrap {
   overflow-x: auto;
@@ -3598,4 +3608,39 @@ button.co-card.compare-pick.picked {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* 成本估算单价输入框 */
+.usage-price-input {
+  width: 84px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.usage-price-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.usage-table tfoot td {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  padding: 8px 10px;
+}
+
+/* 按天 token 趋势折线图 */
+.usage-trend {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 12px;
+}
+.usage-trend-label {
+  font-size: 10px;
+  fill: var(--muted);
+}
+
 

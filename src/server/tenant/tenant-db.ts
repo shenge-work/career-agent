@@ -1443,16 +1443,17 @@ export class TenantDb {
 
       /**
        * 0020 · 按时间范围读明细，供 /api/ai/usage 对账。返回倒序明细行（最新在前）。
-       * since 为可选的时间下界（含），不传则全量。
+       * since 为可选的时间下界（含），不传则全量；limit 可选，用于明细流水列表。
        */
-      listAiUsageEvents: (since?: Date | null) => {
+      listAiUsageEvents: (since?: Date | null, limit?: number) => {
         const conds = [eq(aiUsageEvents.userId, userId)];
         if (since) conds.push(gte(aiUsageEvents.createdAt, since));
-        return db
+        const base = db
           .select()
           .from(aiUsageEvents)
           .where(and(...conds))
           .orderBy(desc(aiUsageEvents.createdAt));
+        return limit && limit > 0 ? base.limit(limit) : base;
       },
     };
   }

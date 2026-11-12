@@ -539,7 +539,19 @@ export interface AiUsageStats {
   models: AiUsageGroup[];
   actions: Array<{ key: string; requests: number; errors: number; promptTokens: number; completionTokens: number; avgLatencyMs: number | null }>;
   errorCodes: Array<{ code: string; requests: number; provider: string | null; model: string | null }>;
+  providerModels: Array<{ provider: string; model: string; requests: number; errors: number; promptTokens: number; completionTokens: number; avgLatencyMs: number | null }>;
   days: Array<{ day: string; requests: number; errors: number; promptTokens: number; completionTokens: number }>;
+  latest: Array<{
+    at: string | null;
+    provider: string | null;
+    model: string | null;
+    action: string | null;
+    status: string | null;
+    errorCode: string | null;
+    latencyMs: number | null;
+    promptTokens: number | null;
+    completionTokens: number | null;
+  }>;
 }
 
 export const getAiUsage = (range: string) =>

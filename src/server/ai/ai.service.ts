@@ -292,6 +292,8 @@ export class AiService {
     const byDay = new Map<string, { requests: number; errors: number; promptTokens: number; completionTokens: number }>();
     const byAction = new Map<string, { requests: number; errors: number; promptTokens: number; completionTokens: number; latencyMs: number; latencyCount: number }>();
     const byErrorCode = new Map<string, { requests: number; provider: string | null; model: string | null }>();
+    // 厂商 × 模型交叉透视（key = `${provider}\u0000${model}`）
+    const byProviderModel = new Map<string, { provider: string; model: string; requests: number; errors: number; promptTokens: number; completionTokens: number; latencyMs: number; latencyCount: number }>();
 
     for (const r of rows) {
       const err = r.status === 'error' ? 1 : 0;
@@ -356,6 +358,25 @@ export class AiService {
         eb.requests += 1;
         byErrorCode.set(ekey, eb);
       }
+
+      // 厂商 × 模型交叉透视
+      const pmKey = `${r.provider || '(未记录)'}\u0000${r.model || '(未记录)'}`;
+      const pm = byProviderModel.get(pmKey) ?? {
+        provider: r.provider || '(未记录)',
+        model: r.model || '(未记录)',
+        requests: 0,
+        errors: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        latencyMs: 0,
+        latencyCount: 0,
+      };
+      pm.requests += 1;
+      pm.errors += err;
+      pm.promptTokens += pt;
+      pm.completionTokens += ct;
+      if (typeof r.latencyMs === 'number' && r.latencyMs > 0) { pm.latencyMs += r.latencyMs; pm.latencyCount += 1; }
+      byProviderModel.set(pmKey, pm);
     }
 
     const fmt = (m: Map<string, any>) =>
@@ -399,7 +420,30 @@ export class AiService {
       errorCodes: [...byErrorCode.entries()]
         .map(([key, v]) => ({ code: key, requests: v.requests, provider: v.provider, model: v.model }))
         .sort((a, b) => b.requests - a.requests),
+      providerModels: [...byProviderModel.values()]
+        .map((v) => ({
+          provider: v.provider,
+          model: v.model,
+          requests: v.requests,
+          errors: v.errors,
+          promptTokens: v.promptTokens,
+          completionTokens: v.completionTokens,
+          avgLatencyMs: v.latencyCount ? Math.round(v.latencyMs / v.latencyCount) : null,
+        }))
+        .sort((a, b) => b.requests - a.requests),
       days: [...byDay.entries()].map(([day, v]) => ({ day, ...v })).sort((a, b) => (a.day < b.day ? -1 : 1)),
+      // 最近调用明细（rows 已按 createdAt 倒序，取前 50 条供流水列表）
+      latest: rows.slice(0, 50).map((r) => ({
+        at: r.createdAt ? r.createdAt.toISOString() : null,
+        provider: r.provider ?? null,
+        model: r.model ?? null,
+        action: r.action ?? null,
+        status: r.status ?? null,
+        errorCode: r.errorCode ?? null,
+        latencyMs: r.latencyMs ?? null,
+        promptTokens: r.promptTokens ?? null,
+        completionTokens: r.completionTokens ?? null,
+      })),
     };
   }
 
