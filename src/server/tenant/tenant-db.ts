@@ -785,7 +785,12 @@ export class TenantDb {
           }
         }
         const words = Array.from(new Set([...terms, ...bigrams]));
-        const conds = words.flatMap((w) => {
+        // 上限保护：超长 query（如整段 JD / 大段文本）会产生「词数 × 3 列」个
+        // `%..%` OR 全表扫描条件，必须截断，否则查询会爆炸式膨胀。
+        // 注：中文检索不做 pg_trgm（对双字词几乎无加速）也不做 FTS（PGlite WASM 无 zhparser），
+        // 待切真 PG 后引入 zhparser + to_tsvector 才是正解，这里先保证查询规模有界。
+        const wordsLimited = words.slice(0, 20);
+        const conds = wordsLimited.flatMap((w) => {
           const like = `%${w}%`;
           return [ilike(interviewKb.title, like), ilike(interviewKb.category, like), ilike(interviewKb.content, like)];
         });
