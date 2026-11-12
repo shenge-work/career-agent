@@ -19,17 +19,17 @@ function sectionsOf(p: Record<string, any> | null | undefined): any[] {
 }
 
 /** 简历缩略图：缩小版 iframe 加载真实 A4 预览，空简历显示占位纸张。 */
-function Thumb({ resume }: { resume: ResumeItem }) {
+function Thumb({ resume, large }: { resume: ResumeItem; large?: boolean }) {
   const empty = sectionsOf(resume.payload).length === 0;
   if (empty) {
     return (
-      <div className="resume-thumb is-empty" aria-label="空白简历">
+      <div className={'resume-thumb is-empty' + (large ? ' is-large' : '')} aria-label="空白简历">
         <span className="muted small">空白</span>
       </div>
     );
   }
   return (
-    <div className="resume-thumb" aria-label={`${resume.title} 缩略图`}>
+    <div className={'resume-thumb' + (large ? ' is-large' : '')} aria-label={`${resume.title} 缩略图`}>
       <iframe
         className="resume-thumb-frame"
         title={resume.title}
@@ -120,6 +120,7 @@ export default function Library() {
   const [restoreVersionId, setRestoreVersionId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'updated' | 'title'>('updated');
   const [page, setPage] = useState(1);
+  const [derivedId, setDerivedId] = useState<string | null>(null);
   const PAGE_SIZE = 10;
 
   const { data: resumes = [], isLoading } = useQuery({
@@ -211,6 +212,7 @@ export default function Library() {
       setJdResult(null);
       setJdText('');
       setSelectedId(row.id);
+      setDerivedId(row.id);
       invalidate();
     },
     onError: onFail,
@@ -292,26 +294,32 @@ export default function Library() {
             <div className="empty">还没有简历，先新建一份。</div>
           ) : (
             <>
-            <ul className="list">
+            <div className="lib-grid">
               {pageData.map((r) => (
-                <li
+                <div
                   key={r.id}
-                  className={'lib-row' + (selectedId === r.id ? ' selected' : '')}
+                  className={'lib-card' + (selectedId === r.id ? ' selected' : '')}
                   onClick={() => setSelectedId(r.id)}
                 >
-                  <Thumb resume={r} />
-                  <div className="li-main">
-                    <div className="title">
+                  <div className="lib-card-thumb" onClick={() => setSelectedId(r.id)}>
+                    <Thumb resume={r} large />
+                  </div>
+                  <div className="lib-card-body">
+                    <div className="lib-card-title" title={r.title}>
                       {r.title}
+                    </div>
+                    <div className="lib-card-tags">
                       {r.isMaster && <span className="tag tag-master">主</span>}
                       {r.kind === 'derived' && <span className="tag">定制</span>}
                       {r.kind === 'blank' && <span className="tag">空白</span>}
+                      {r.tags?.slice(0, 2).map((t) => (
+                        <span key={t} className="tag tag-plain">{t}</span>
+                      ))}
                     </div>
-                    <div className="muted small">
-                      {r.kind} · {fmtTime(r.savedAt)}
-                      {r.tags?.length ? ` · ${r.tags.join(' / ')}` : ''}
+                    <div className="lib-card-meta muted small">
+                      保存于 {fmtTime(r.savedAt)}
                     </div>
-                    <div className="btn-row">
+                    <div className="btn-row" style={{ marginTop: 8 }}>
                       <Link
                         className="mini primary"
                         to={`/editor/${r.id}`}
@@ -328,17 +336,18 @@ export default function Library() {
                       >
                         详情
                       </button>
+                      <span className="spacer" />
+                      <RowMenu
+                        resume={r}
+                        onMaster={(id) => masterM.mutate(id)}
+                        onRemove={remove}
+                        masterPending={masterM.isPending}
+                      />
                     </div>
                   </div>
-                  <RowMenu
-                    resume={r}
-                    onMaster={(id) => masterM.mutate(id)}
-                    onRemove={remove}
-                    masterPending={masterM.isPending}
-                  />
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
 
             {/* 分页 */}
             {totalPages > 1 && (
@@ -440,6 +449,13 @@ export default function Library() {
                     </button>
                   )}
                 </div>
+
+                {derivedId && selected?.id === derivedId && (
+                  <div className="derive-banner">
+                    <span>✓ 已生成派生简历「{selected.title}」，可进入编辑器继续微调。</span>
+                    <Link className="mini primary" to={`/editor/${derivedId}`}>打开编辑器 →</Link>
+                  </div>
+                )}
 
                 {jdParsed && (
                   <div className="jd-report">

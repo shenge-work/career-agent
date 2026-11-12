@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { api, exportTextUrl, pdfUrl, post, put, type ResumeItem } from '../api';
+import ConfirmModal from '../components/ConfirmModal';
 
 /** 点击外部关闭下拉菜单的通用 hook：返回 ref 与开关，供主题/格式/新增板块菜单复用。 */
 function useDismissible(initial = false) {
@@ -185,6 +186,14 @@ function sectionCount(section: any): number {
 const MARGIN_KEYS = ['top', 'right', 'bottom', 'left'] as const;
 const MARGIN_LABELS: Record<string, string> = { top: '上', right: '右', bottom: '下', left: '左' };
 
+/** 删除二次确认上下文：各删除按钮通过 requestDelete(描述, 执行回调) 上报，统一走确认弹窗。 */
+interface DeleteRequest {
+  label: string;
+  action: () => void;
+}
+const DeleteConfirmContext = createContext<(req: DeleteRequest) => void>(() => {});
+const useDeleteConfirm = () => useContext(DeleteConfirmContext);
+
 interface FieldProps {
   label: string;
   path: Path;
@@ -228,9 +237,11 @@ interface ItemCardProps {
   brief: string;
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
+  deleteLabel?: string;
   children: ReactNode;
 }
-function ItemCard({ index, count, brief, onMove, onDelete, children }: ItemCardProps) {
+function ItemCard({ index, count, brief, onMove, onDelete, deleteLabel, children }: ItemCardProps) {
+  const requestDelete = useDeleteConfirm();
   return (
     <div className="item-card">
       <div className="item-bar">
@@ -238,7 +249,7 @@ function ItemCard({ index, count, brief, onMove, onDelete, children }: ItemCardP
         <span className="spacer" />
         <button className="mini" disabled={index === 0} onClick={() => onMove(-1)} title="上移">↑</button>
         <button className="mini" disabled={index === count - 1} onClick={() => onMove(1)} title="下移">↓</button>
-        <button className="mini danger" onClick={onDelete}>删除</button>
+        <button className="mini danger" onClick={() => requestDelete({ label: deleteLabel || brief, action: onDelete })}>删除</button>
       </div>
       <div className="item-body">{children}</div>
     </div>
@@ -247,10 +258,11 @@ function ItemCard({ index, count, brief, onMove, onDelete, children }: ItemCardP
 
 /* ------------------------------ 顶部信息卡 ------------------------------ */
 function TopInfoCard({ data, prefix, onSet }: { data: any; prefix: Path; onSet: (p: Path, v: any) => void }) {
+  const requestDelete = useDeleteConfirm();
   const contact = Array.isArray(data?.contact) ? data.contact : [];
   const margins = data?.pageMargins || { top: 14, right: 14, bottom: 14, left: 14 };
   return (
-    <div className="sec-card top-card">
+    <div className="sec-card top-card" data-anchor="outline-top">
       <div className="sec-head static">
         <strong className="sec-title">顶部信息</strong>
         <span className="muted small">姓名 / 定位 / 联系方式 / 页边距</span>
@@ -274,7 +286,7 @@ function TopInfoCard({ data, prefix, onSet }: { data: any; prefix: Path; onSet: 
               />
               <button className="mini" disabled={i === 0} onClick={() => onSet([...prefix, 'contact'], moveInArray(contact, i, -1))}>↑</button>
               <button className="mini" disabled={i === contact.length - 1} onClick={() => onSet([...prefix, 'contact'], moveInArray(contact, i, 1))}>↓</button>
-              <button className="mini danger" onClick={() => onSet([...prefix, 'contact'], removeAt(contact, i))}>×</button>
+              <button className="mini danger" onClick={() => requestDelete({ label: `联系方式「${String(typeof c === 'object' && c ? (c.text ?? '') : (c ?? '')) || '未命名'}」`, action: () => onSet([...prefix, 'contact'], removeAt(contact, i)) })}>×</button>
             </div>
           ))}
           <button className="mini add" onClick={() => onSet([...prefix, 'contact'], [...contact, makeItem('contact', contact[0])])}>＋ 添加联系方式</button>
@@ -321,6 +333,7 @@ function AdvantagesPanel({ section, prefix, onSet }: { section: any; prefix: Pat
 }
 
 function HighlightsPanel({ section, prefix, onSet }: { section: any; prefix: Path; onSet: (p: Path, v: any) => void }) {
+  const requestDelete = useDeleteConfirm();
   const cards = Array.isArray(section?.cards) ? section.cards : [];
   const tags = Array.isArray(section?.tags) ? section.tags : [];
   return (
@@ -346,7 +359,7 @@ function HighlightsPanel({ section, prefix, onSet }: { section: any; prefix: Pat
           <div className="inline-row" key={i}>
             <input value={String(t ?? '')} placeholder="关键词（如 RAG / Multi-Agent）"
               onChange={(e) => onSet([...prefix, 'tags', i], e.target.value)} />
-            <button className="mini danger" onClick={() => onSet([...prefix, 'tags'], removeAt(tags, i))}>×</button>
+            <button className="mini danger" onClick={() => requestDelete({ label: `标签「${String(t ?? '') || '未命名'}」`, action: () => onSet([...prefix, 'tags'], removeAt(tags, i)) })}>×</button>
           </div>
         ))}
         <button className="mini add" onClick={() => onSet([...prefix, 'tags'], [...tags, makeItem('tag', tags[0])])}>＋ 添加标签</button>
@@ -397,6 +410,7 @@ function SkillsPanel({ section, prefix, onSet }: { section: any; prefix: Path; o
 }
 
 function ResultList({ results, prefix, onSet }: { results: any; prefix: Path; onSet: (p: Path, v: any) => void }) {
+  const requestDelete = useDeleteConfirm();
   const list = Array.isArray(results) ? results : [];
   return (
     <div className="sublist">
@@ -411,7 +425,7 @@ function ResultList({ results, prefix, onSet }: { results: any; prefix: Path; on
           <div className="result-actions">
             <button className="mini" disabled={ri === 0} onClick={() => onSet(prefix, moveInArray(list, ri, -1))}>↑</button>
             <button className="mini" disabled={ri === list.length - 1} onClick={() => onSet(prefix, moveInArray(list, ri, 1))}>↓</button>
-            <button className="mini danger" onClick={() => onSet(prefix, removeAt(list, ri))}>×</button>
+            <button className="mini danger" onClick={() => requestDelete({ label: `成果「${String(typeof r === 'object' && r ? (r.text ?? '') : (r ?? '')).slice(0, 20) || '未命名'}」`, action: () => onSet(prefix, removeAt(list, ri)) })}>×</button>
           </div>
         </div>
       ))}
@@ -425,6 +439,7 @@ function CareerItemCard({ job, index, count, prefix, onMove, onDelete, onSet }: 
   onMove: (d: -1 | 1) => void; onDelete: () => void; onSet: (p: Path, v: any) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const requestDelete = useDeleteConfirm();
   const projects = Array.isArray(job?.projects) ? job.projects : [];
   return (
     <div className="item-card career-item">
@@ -434,10 +449,9 @@ function CareerItemCard({ job, index, count, prefix, onMove, onDelete, onSet }: 
         <span className="spacer" />
         <button className="mini" disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
         <button className="mini" disabled={index === count - 1} onClick={() => onMove(1)}>↓</button>
-        <button className="mini danger" onClick={onDelete}>删除</button>
+        <button className="mini danger" onClick={() => requestDelete({ label: `经历「${job?.company || `经历 ${index + 1}`}」`, action: onDelete })}>删除</button>
       </div>
-      {open && (
-        <div className="item-body">
+      {open && (        <div className="item-body">
           <TextField label="公司" path={[...prefix, 'company']} value={job?.company} onSet={onSet} />
           <TextField label="岗位" path={[...prefix, 'role']} value={job?.role} onSet={onSet} />
           <TextField label="时间" path={[...prefix, 'date']} value={job?.date} onSet={onSet} />
@@ -453,7 +467,7 @@ function CareerItemCard({ job, index, count, prefix, onMove, onDelete, onSet }: 
                   <span className="spacer" />
                   <button className="mini" disabled={pi === 0} onClick={() => onSet([...prefix, 'projects'], moveInArray(projects, pi, -1))}>↑</button>
                   <button className="mini" disabled={pi === projects.length - 1} onClick={() => onSet([...prefix, 'projects'], moveInArray(projects, pi, 1))}>↓</button>
-                  <button className="mini danger" onClick={() => onSet([...prefix, 'projects'], removeAt(projects, pi))}>删除</button>
+                  <button className="mini danger" onClick={() => requestDelete({ label: `项目「${p?.name || '未命名'}」`, action: () => onSet([...prefix, 'projects'], removeAt(projects, pi)) })}>删除</button>
                 </div>
                 <div className="item-body">
                   <TextField label="项目名" path={[...prefix, 'projects', pi, 'name']} value={p?.name} onSet={onSet} />
@@ -591,10 +605,11 @@ function SectionCard({ section, index, count, prefix, onSet, onMove, onDelete }:
   onSet: (p: Path, v: any) => void; onMove: (d: -1 | 1) => void; onDelete: () => void;
 }) {
   const [open, setOpen] = useState(true);
+  const requestDelete = useDeleteConfirm();
   const meta = SECTION_META[section?.type] || { label: section?.type || '未知' };
   const n = sectionCount(section);
   return (
-    <div className="sec-card">
+    <div className="sec-card" data-anchor={`outline-${section?.id ?? index}`}>
       <div className="sec-head" role="button" tabIndex={0} aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); } }}>
@@ -605,7 +620,7 @@ function SectionCard({ section, index, count, prefix, onSet, onMove, onDelete }:
         <span className="spacer" />
         <button className="mini" disabled={index === 0} onClick={(e) => { e.stopPropagation(); onMove(-1); }}>↑</button>
         <button className="mini" disabled={index === count - 1} onClick={(e) => { e.stopPropagation(); onMove(1); }}>↓</button>
-        <button className="mini danger" onClick={(e) => { e.stopPropagation(); onDelete(); }}>删除</button>
+        <button className="mini danger" onClick={(e) => { e.stopPropagation(); requestDelete({ label: `板块「${section?.title || meta.label}」`, action: onDelete }); }}>删除</button>
       </div>
       {open && (
         <div className="sec-body">
@@ -620,29 +635,54 @@ function SectionCard({ section, index, count, prefix, onSet, onMove, onDelete }:
 
 function ResumeEditor({ data, prefix, onSet }: { data: any; prefix: Path; onSet: (p: Path, v: any) => void }) {
   const addMenu = useDismissible(false);
+  const [pending, setPending] = useState<DeleteRequest | null>(null);
   const sections = Array.isArray(data?.sections) ? data.sections : [];
+  const requestDelete = useCallback((req: DeleteRequest) => setPending(req), []);
+  const jumpTo = useCallback((anchor: string) => {
+    const el = document.querySelector(`[data-anchor="${anchor}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
   return (
-    <div className="semantic-editor">
-      <TopInfoCard data={data} prefix={prefix} onSet={onSet} />
-      {sections.map((s: any, i: number) => (
-        <SectionCard key={s?.id ?? i} section={s} index={i} count={sections.length} prefix={[...prefix, 'sections', i]}
-          onSet={onSet}
-          onMove={(d) => onSet([...prefix, 'sections'], moveInArray(sections, i, d))}
-          onDelete={() => onSet([...prefix, 'sections'], removeAt(sections, i))} />
-      ))}
-      <div className="add-section-wrap" ref={addMenu.ref}>
-        <button className="mini add" onClick={() => addMenu.setOpen((v) => !v)}>＋ 添加板块</button>
-        {addMenu.open && (
-          <div className="menu-pop add-section-pop" role="menu">
-            {Object.keys(SECTION_META).map((t) => (
-              <button key={t} className="menu-item" onClick={() => { onSet([...prefix, 'sections'], [...sections, blankSection(t)]); addMenu.setOpen(false); }}>
-                {SECTION_META[t].label}
-              </button>
-            ))}
-          </div>
-        )}
+    <DeleteConfirmContext.Provider value={requestDelete}>
+      <div className="semantic-editor">
+        <div className="outline-bar" role="navigation" aria-label="板块大纲">
+          <button className="outline-chip" onClick={() => jumpTo('outline-top')}>顶部</button>
+          {sections.map((s: any, i: number) => (
+            <button key={s?.id ?? i} className="outline-chip" onClick={() => jumpTo(`outline-${s?.id ?? i}`)}>
+              {s?.title || SECTION_META[s?.type]?.label || `板块 ${i + 1}`}
+            </button>
+          ))}
+        </div>
+        <TopInfoCard data={data} prefix={prefix} onSet={onSet} />
+        {sections.map((s: any, i: number) => (
+          <SectionCard key={s?.id ?? i} section={s} index={i} count={sections.length} prefix={[...prefix, 'sections', i]}
+            onSet={onSet}
+            onMove={(d) => onSet([...prefix, 'sections'], moveInArray(sections, i, d))}
+            onDelete={() => onSet([...prefix, 'sections'], removeAt(sections, i))} />
+        ))}
+        <div className="add-section-wrap" ref={addMenu.ref}>
+          <button className="mini add" onClick={() => addMenu.setOpen((v) => !v)}>＋ 添加板块</button>
+          {addMenu.open && (
+            <div className="menu-pop add-section-pop" role="menu">
+              {Object.keys(SECTION_META).map((t) => (
+                <button key={t} className="menu-item" onClick={() => { onSet([...prefix, 'sections'], [...sections, blankSection(t)]); addMenu.setOpen(false); }}>
+                  {SECTION_META[t].label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+      <ConfirmModal
+        open={pending !== null}
+        title="确认删除"
+        message={`删除「${pending?.label || ''}」？此操作可撤销（Cmd/Ctrl+Z），但删除后需要手动重建内容。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={() => { pending?.action(); setPending(null); }}
+        onCancel={() => setPending(null)}
+      />
+    </DeleteConfirmContext.Provider>
   );
 }
 
