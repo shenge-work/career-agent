@@ -16,6 +16,7 @@
     "db:migrate": "ts-node src/server/db/migrate.ts",
     "seed:user": "ts-node src/server/db/seed-user.ts",
     "import:v1": "ts-node src/server/db/import-v1.ts",
+    "sync:verify": "ts-node scripts/verify-sync-count.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "desktop:icons": "node desktop/scripts/generate-icons.mjs",
